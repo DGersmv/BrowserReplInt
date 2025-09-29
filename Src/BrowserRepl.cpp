@@ -4,8 +4,12 @@
 
 // ---------------------------------- Includes ---------------------------------
 #include "BrowserRepl.hpp"
+#include "APIEnvir.h"
 #include "ACAPinc.h"        // для ACAPI_ELEMENT_MASK_* макросов
-#include <random> 
+#include <random>
+#include <cmath>
+#include <cstdlib>
+#include <cstdio>   // для sscanf
 
 // --------------------- Math helpers ---------------------
 constexpr double PI = 3.14159265358979323846;
@@ -14,6 +18,7 @@ constexpr double DegToRad(double deg) { return deg * PI / 180.0; }
 // --------------------- Globals ---------------------
 static const GS::Guid paletteGuid("{11bd981d-f772-4a57-8709-42e18733a0cc}");
 GS::Ref<BrowserRepl> BrowserRepl::instance;
+static GS::UniString g_rotatePivotMode = "origin";   // "origin" | "bbox"
 
 // --------------------- Helpers ---------------------
 static GS::UniString LoadHtmlFromResource()
@@ -111,7 +116,7 @@ void BrowserRepl::DestroyInstance() { instance = nullptr; }
 void BrowserRepl::Show()
 {
 	DG::Palette::Show();
-	browser.LoadHTML(LoadHtmlFromResource());   // возврат на «домашнюю» HTML
+	browser.LoadHTML(LoadHtmlFromResource());   // вернуть «домашнюю» HTML
 	SetMenuItemCheckedState(true);
 }
 
@@ -148,6 +153,20 @@ void BrowserRepl::RegisterACAPIJavaScriptObject()
 		ModifySelection(GetStringFromJavaScriptVariable(param), RemoveFromSelection);
 		return ConvertToJavaScriptVariable(true);
 		}));
+
+	// --- Set pivot mode for rotation (origin | bbox) ---
+	jsACAPI->AddItem(new JS::Function("SetRotateMode", [](GS::Ref<JS::Base> param) {
+		GS::UniString m = GetStringFromJavaScriptVariable(param);
+		g_rotatePivotMode = m.IsEqual("bbox") ? GS::UniString("bbox") : GS::UniString("origin");
+
+		GS::UniString msg;
+		msg.Append("[JS] SetRotateMode = ");
+		msg.Append(g_rotatePivotMode);
+		ACAPI_WriteReport(msg.ToCStr().Get(), false);
+
+		return new JS::Value(true);
+		}));
+
 	// --- Randomize angles for selected (Object/Lamp/Column) ---
 	jsACAPI->AddItem(new JS::Function("RandomizeSelectedAngles", [](GS::Ref<JS::Base>) {
 		ACAPI_WriteReport("[JS] RandomizeSelectedAngles called", false);
@@ -188,7 +207,7 @@ void BrowserRepl::RegisterACAPIJavaScriptObject()
 
 				case API_LampID:
 					element.lamp.angle = rnd;
-					ACAPI_ELEMENT_MASK_SET(mask, API_ObjectType, angle);
+					ACAPI_ELEMENT_MASK_SET(mask, API_LampType, angle);   // ВАЖНО: лампа -> API_LampType
 					apply = true;
 					break;
 
@@ -202,8 +221,9 @@ void BrowserRepl::RegisterACAPIJavaScriptObject()
 					break;
 				}
 
-				if (!apply) continue;
-				(void)ACAPI_Element_Change(&element, &mask, nullptr, 0, true);
+				if (apply) {
+					(void)ACAPI_Element_Change(&element, &mask, nullptr, 0, true);
+				}
 			}
 			return NoError;
 			});
@@ -213,11 +233,13 @@ void BrowserRepl::RegisterACAPIJavaScriptObject()
 		}));
 
 
+	// --- Rotate selection by entered angle (supports origin/bbox) ---
+	// HTML: ACAPI.SetRotateMode(mode); ACAPI.RotateSelected(angleString);
 	// --- Rotate selection (columns / objects / lamps) ---
 	jsACAPI->AddItem(new JS::Function("RotateSelected", [](GS::Ref<JS::Base> param) {
 		ACAPI_WriteReport("[JS] RotateSelected called", false);
 
-		// 1) Надёжно разбираем угол
+		
 		double angleDeg = 0.0;
 		int jsType = -1;
 
@@ -231,7 +253,7 @@ void BrowserRepl::RegisterACAPIJavaScriptObject()
 			else if (v->GetType() == JS::Value::STRING) {
 				GS::UniString s = v->GetString();
 
-				// заменяем ',' на '.' чтобы локаль не подвела
+				
 				for (UIndex i = 0; i < s.GetLength(); ++i) {
 					if (s[i] == ',') s[i] = '.';
 				}
@@ -242,7 +264,7 @@ void BrowserRepl::RegisterACAPIJavaScriptObject()
 				}
 			}
 			else {
-				// универсальный fallback: пытаемся выжать строку и распарсить
+				
 				GS::UniString s;
 				try { s = v->GetString(); }
 				catch (...) {}
@@ -264,7 +286,7 @@ void BrowserRepl::RegisterACAPIJavaScriptObject()
 		}
 
 
-		// 2) Собираем выборку
+		
 		API_SelectionInfo selInfo = {};
 		GS::Array<API_Neig> selNeigs;
 		ACAPI_Selection_Get(&selInfo, &selNeigs, false, false);
@@ -278,7 +300,7 @@ void BrowserRepl::RegisterACAPIJavaScriptObject()
 		const double addRad = DegToRad(angleDeg);
 		GS::UInt32 changedByParams = 0;
 
-		// 3) Сначала пытаемся повернуть параметрами (колонны/объекты/лампы)
+		
 		GSErrCode cmdErr = ACAPI_CallUndoableCommand("Rotate Selected (Columns/Objects/Lamps)", [&]() -> GSErrCode {
 			for (const API_Neig& n : selNeigs) {
 				API_Element element = {};
@@ -309,7 +331,7 @@ void BrowserRepl::RegisterACAPIJavaScriptObject()
 
 				case API_LampID:
 					element.lamp.angle += addRad;
-					// у ламп тот же угол, что и у объектов
+					
 					ACAPI_ELEMENT_MASK_SET(mask, API_ObjectType, angle);
 					canParamRotate = true;
 					break;
@@ -333,7 +355,7 @@ void BrowserRepl::RegisterACAPIJavaScriptObject()
 			return NoError;
 			});
 
-		// 4) Если параметрами не повернулось НИЧЕГО — делаем геометрический поворот всей выборки
+		
 		if (changedByParams == 0) {
 			ACAPI_WriteReport("[Rotate] param-change did not modify anything, fallback to ACAPI_Element_Edit", false);
 
@@ -359,6 +381,9 @@ void BrowserRepl::RegisterACAPIJavaScriptObject()
 		ACAPI_WriteReport("[Rotate] done", cmdErr != NoError);
 		return new JS::Value(cmdErr == NoError);
 		}));
+
+
+
 
 	// --- Align selection to X axis (angle = 0) ---
 	jsACAPI->AddItem(new JS::Function("AlignSelectedX", [](GS::Ref<JS::Base>) {
@@ -401,7 +426,7 @@ void BrowserRepl::RegisterACAPIJavaScriptObject()
 
 				case API_LampID:
 					element.lamp.angle = 0.0;
-					ACAPI_ELEMENT_MASK_SET(mask, API_ObjectType, angle);
+					ACAPI_ELEMENT_MASK_SET(mask, API_LampType, angle);
 					break;
 
 				default:
@@ -417,13 +442,113 @@ void BrowserRepl::RegisterACAPIJavaScriptObject()
 			return NoError;
 			});
 
-
-
 		ACAPI_WriteReport("[AlignX] done", cmdErr != NoError);
 		return new JS::Value(cmdErr == NoError);
 		}));
 
-		
+
+	// --- Orient objects to a picked point ---
+	jsACAPI->AddItem(new JS::Function("OrientObjectsToPoint", [](GS::Ref<JS::Base> param) {
+		ACAPI_WriteReport("[JS] OrientObjectsToPoint called", false);
+
+		// 1) режим (origin | bbox)
+		GS::UniString mode = "origin";
+		if (GS::Ref<JS::Value> v = GS::DynamicCast<JS::Value>(param)) {
+			if (v->GetType() == JS::Value::STRING)
+				mode = v->GetString();
+		}
+
+		// лог
+		{
+			GS::UniString log; log.Append("[Orient] mode = "); log.Append(mode);
+			ACAPI_WriteReport(log.ToCStr().Get(), false);
+		}
+
+		// 2) запрос точки
+		API_GetPointType pt = {};
+		CHTruncate("Укажите точку для ориентации объектов", pt.prompt, sizeof(pt.prompt));
+		if (ACAPI_UserInput_GetPoint(&pt) != NoError) {
+			ACAPI_WriteReport("[Orient] Point picking cancelled or failed", true);
+			return new JS::Value(false);
+		}
+		const API_Coord target = { pt.pos.x, pt.pos.y };
+
+		// 3) выделение
+		API_SelectionInfo selInfo = {};
+		GS::Array<API_Neig> selNeigs;
+		ACAPI_Selection_Get(&selInfo, &selNeigs, false, false);
+		BMKillHandle((GSHandle*)&selInfo.marquee.coords);
+
+		if (selNeigs.IsEmpty()) {
+			ACAPI_WriteReport("[Orient] selection empty", false);
+			return new JS::Value(false);
+		}
+
+		// 4) логика
+		GSErrCode err = ACAPI_CallUndoableCommand("Orient Objects to Point", [&]() -> GSErrCode {
+			for (const API_Neig& n : selNeigs) {
+				API_Element element = {};
+				element.header.guid = n.guid;
+
+				if (ACAPI_Element_Get(&element) != NoError)
+					continue;
+
+				API_Coord objPos = {};
+				bool canOrient = true;
+
+				if (mode.IsEqual("origin")) {
+					switch (element.header.type.typeID) {
+					case API_ObjectID: objPos = element.object.pos; break;
+					case API_LampID:   objPos = element.lamp.pos;   break;
+					case API_ColumnID: objPos.x = element.column.origoPos.x; objPos.y = element.column.origoPos.y; break;
+					default: canOrient = false; break;
+					}
+				}
+				else if (mode.IsEqual("bbox")) {
+					API_Box3D bounds;
+					if (ACAPI_Element_CalcBounds(&element.header, &bounds) == NoError) {
+						objPos.x = (bounds.xMin + bounds.xMax) * 0.5;
+						objPos.y = (bounds.yMin + bounds.yMax) * 0.5;
+					}
+					else {
+						canOrient = false;
+					}
+				}
+
+				if (!canOrient) continue;
+
+				const double dx = target.x - objPos.x;
+				const double dy = target.y - objPos.y;
+				const double newAngle = std::atan2(dy, dx);
+
+				API_Element mask; ACAPI_ELEMENT_MASK_CLEAR(mask);
+
+				switch (element.header.type.typeID) {
+				case API_ObjectID:
+					element.object.angle = newAngle;
+					ACAPI_ELEMENT_MASK_SET(mask, API_ObjectType, angle);
+					break;
+				case API_LampID:
+					element.lamp.angle = newAngle;
+					ACAPI_ELEMENT_MASK_SET(mask, API_LampType, angle); // лампа -> API_LampType
+					break;
+				case API_ColumnID:
+					element.column.axisRotationAngle = newAngle;
+					ACAPI_ELEMENT_MASK_SET(mask, API_ColumnType, axisRotationAngle);
+					break;
+				default:
+					break;
+				}
+
+				(void)ACAPI_Element_Change(&element, &mask, nullptr, 0, true);
+			}
+			return NoError;
+			});
+
+		ACAPI_WriteReport("[Orient] done", err != NoError);
+		return new JS::Value(err == NoError);
+		}));
+
 
 	// --- Register object in the browser ---
 	browser.RegisterAsynchJSObject(jsACAPI);

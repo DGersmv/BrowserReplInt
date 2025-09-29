@@ -141,16 +141,19 @@
     }
 
     // существующие действия
-    function RotateSelection () {
-      var raw = document.getElementById('rotateAngle').value || '';
-      var s = raw.trim().replace(',', '.');
-      if (s === '' || isNaN(Number(s))) {
-        alert('Введите угол (число)');
-        return;
-      }
-      ACAPI.RotateSelected(s);
-      setInfo("info-orient", "Повернули выделение на угол: " + s + "°");
-    }
+
+function RotateSelection () {
+  var raw = document.getElementById('rotateAngle').value || '';
+  var s   = raw.trim().replace(',', '.');
+  if (s === '' || isNaN(Number(s))) { alert('Введите угол (число)'); return; }
+
+  var mode = document.getElementById('orientMode').value;   // ← режим из селекта
+  ACAPI.SetRotateMode(mode);                                 // ← сообщаем в плагин
+
+  ACAPI.RotateSelected(s);                                   // ← крутим на угол
+  setInfo("info-orient", "Повернули выделение на угол: " + s + "° (" + mode + ")");
+}
+
 
     function AlignSelectionX () {
       ACAPI.AlignSelectedX();
@@ -211,9 +214,11 @@
     }
 
     function OrientObjectsToPoint () {
-      ACAPI.OrientObjectsToPoint();
-      setInfo("info-orient", "Объекты сориентированы на точку");
-    }
+  var mode = document.getElementById('orientMode').value;
+  ACAPI.OrientObjectsToPoint(mode);   // ⚡ передаём строку
+  setInfo("info-orient", "Объекты сориентированы на точку (" + mode + ")");
+}
+
 
     // --- Новый блок: Приземление ---
     function SetGroundSurface () {
@@ -303,21 +308,34 @@
     <div id="info-dist" class="info-box">Подсказка: задайте линию, объект и шаг или количество</div>
   </fieldset>
 
-  <!-- Блок: Ориентация -->
-  <fieldset class="control-block">
-    <legend>Ориентация</legend>
-    <div>
-      <label for="rotateAngle">Угол поворота:</label>
-      <input type="number" id="rotateAngle" step="1">
-      <input type="button" onclick="RotateSelection()" value="Повернуть">
-    </div>
-    <div style="text-align:center; margin-top:10px;">
-      <input type="button" onclick="AlignSelectionX()" value="Выровнять по X"><br><br>
-      <input type="button" onclick="RandomizeAngles()" value="Случайный угол (0–360°)"><br><br>
-      <input type="button" onclick="OrientObjectsToPoint()" value="Сориентировать на точку">
-    </div>
-    <div id="info-orient" class="info-box">Подсказка: задайте угол или выберите действие</div>
-  </fieldset>
+<!-- Блок: Ориентация -->
+<fieldset class="control-block">
+  <legend>Ориентация</legend>
+
+  <div>
+  <label for="rotateAngle">Угол поворота:</label>
+  <input type="number" id="rotateAngle" step="1" value="0">
+  <input type="button" onclick="RotateSelection()" value="Повернуть">
+</div>
+
+
+  <div style="margin-top:10px;">
+    <label for="orientMode">Точка привязки:</label>
+    <select id="orientMode">
+      <option value="origin">Базовая точка объекта</option>
+      <option value="bbox">Геометрический центр</option>
+    </select>
+  </div>
+
+  <div style="text-align:center; margin-top:10px;">
+    <input type="button" onclick="AlignSelectionX()" value="Выровнять по X"><br><br>
+    <input type="button" onclick="RandomizeAngles()" value="Случайный угол (0–360°)"><br><br>
+    <input type="button" onclick="OrientObjectsToPoint()" value="Сориентировать на точку">
+  </div>
+
+  <div id="info-orient" class="info-box">Подсказка: задайте угол или выберите действие</div>
+</fieldset>
+
 
   <!-- Блок: Приземление -->
   <fieldset class="control-block">
