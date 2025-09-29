@@ -1,0 +1,339 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<html>
+<head>
+  <title>Selection Test</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f5f5f5;
+      margin: 20px;
+    }
+
+    table.selection-table {
+      border-collapse: collapse;
+      margin: 0 auto 20px auto;
+      width: 80%;
+      max-width: 800px;
+      background-color: #fff;
+    }
+    table.selection-table th, table.selection-table td {
+      border: 1px solid #888;
+      padding: 6px 10px;
+      text-align: center;
+    }
+    table.selection-table thead {
+      background-color: #f0f0f0;
+      font-weight: bold;
+    }
+    table.selection-table tbody tr:nth-child(even) {
+      background-color: #f9f9f9;
+    }
+    table.selection-table tbody tr:nth-child(odd) {
+      background-color: #ffffff;
+    }
+
+    fieldset.control-block {
+      display: block;
+      margin: 15px auto;
+      padding: 15px;
+      width: 380px;
+      max-width: 90%;
+      border: 1px solid #aaa;
+      border-radius: 6px;
+      background-color: #fff;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    fieldset.control-block legend {
+      font-weight: bold;
+    }
+
+    fieldset.control-block label {
+      display: inline-block;
+      width: 140px;
+      text-align: right;
+      margin-right: 8px;
+    }
+
+    fieldset.control-block input[type="number"] {
+      width: 120px;
+      padding: 3px;
+      margin: 3px 0;
+    }
+
+    fieldset.control-block input[type="button"] {
+      margin: 4px 0;
+      padding: 4px 10px;
+      cursor: pointer;
+    }
+
+    .info-box {
+      margin-top: 10px;
+      padding: 6px;
+      background-color: #f9f9f9;
+      border: 1px dashed #aaa;
+      font-size: 12px;
+      min-height: 30px;
+      white-space: pre-wrap;
+    }
+
+    a {
+      display: block;
+      text-align: center;
+      margin-top: 20px;
+    }
+  </style>
+
+  <script type="text/javascript">
+    // обновление таблицы выделения
+    function UpdateSelectedElements () {
+      ACAPI.GetSelectedElements().then(function (elemInfos) {
+        var selectionTable = document.getElementById('selection');
+        while (selectionTable.firstChild) {
+          selectionTable.removeChild(selectionTable.firstChild);
+        }
+
+        if (elemInfos.length === 0) {
+          var tr = document.createElement('tr');
+          selectionTable.appendChild(tr);
+          var dummy = document.createElement('td');
+          dummy.innerHTML = 'Нет выбранных элементов';
+          dummy.setAttribute('colspan', '3');
+          tr.appendChild(dummy);
+          return;
+        }
+
+        // группировка по Type + Element ID
+        var grouped = {};
+        for (var i = 0; i < elemInfos.length; i++) {
+          var typeName = elemInfos[i][1];
+          var elemID   = elemInfos[i][2];
+          var key = typeName + "||" + elemID;
+          if (!grouped[key]) {
+            grouped[key] = { type: typeName, id: elemID, count: 0 };
+          }
+          grouped[key].count++;
+        }
+
+        // вывод в таблицу
+        for (var key in grouped) {
+          var tr = document.createElement('tr');
+          selectionTable.appendChild(tr);
+
+          var tdType = document.createElement('td');
+          tdType.innerHTML = grouped[key].type;
+          tr.appendChild(tdType);
+
+          var tdID = document.createElement('td');
+          tdID.innerHTML = grouped[key].id;
+          tr.appendChild(tdID);
+
+          var tdCount = document.createElement('td');
+          tdCount.innerHTML = grouped[key].count;
+          tr.appendChild(tdCount);
+        }
+      });
+    }
+
+    // --- Вспомогательная функция ---
+    function setInfo(id, msg) {
+      document.getElementById(id).innerText = msg;
+    }
+
+    // существующие действия
+    function RotateSelection () {
+      var raw = document.getElementById('rotateAngle').value || '';
+      var s = raw.trim().replace(',', '.');
+      if (s === '' || isNaN(Number(s))) {
+        alert('Введите угол (число)');
+        return;
+      }
+      ACAPI.RotateSelected(s);
+      setInfo("info-orient", "Повернули выделение на угол: " + s + "°");
+    }
+
+    function AlignSelectionX () {
+      ACAPI.AlignSelectedX();
+      setInfo("info-orient", "Выравнивание по X выполнено");
+    }
+
+    function RandomizeAngles () {
+      ACAPI.RandomizeSelectedAngles();
+      setInfo("info-orient", "Задан случайный угол для выделенных объектов");
+    }
+
+    // --- Новые функции ---
+    function CreateSlabAlongCurve () {
+      var width = document.getElementById('slabWidth').value || '';
+      ACAPI.CreateSlabAlongCurve(width);
+      setInfo("info-curve", "Создано перекрытие\nШирина: " + width);
+    }
+
+    function CreateShellAlongCurve () {
+      var width = document.getElementById('shellWidth').value || '';
+      var useMesh = document.getElementById('useMesh').checked;
+
+      if (useMesh) {
+        var hasMesh = ACAPI.CheckMeshSelected && ACAPI.CheckMeshSelected(); // заглушка
+        if (!hasMesh) {
+          setInfo("info-curve", "❗ Не выбрана 3D сетка\nСоздаётся перекрытие вместо оболочки");
+          ACAPI.CreateSlabAlongCurve(width);
+          return;
+        }
+        ACAPI.CreateShellAlongCurve(width, "mesh");
+        setInfo("info-curve", "Оболочка создана по линии\nс проекцией на 3D сетку\nШирина: " + width);
+      } else {
+        ACAPI.CreateShellAlongCurve(width, "line");
+        setInfo("info-curve", "Оболочка создана по линии\nШирина: " + width);
+      }
+    }
+
+    function SetDistributionLine () {
+      ACAPI.SetDistributionLine();
+      setInfo("info-dist", "Задана линия распределения");
+    }
+
+    function SetDistributionObject () {
+      ACAPI.SetDistributionObject();
+      setInfo("info-dist", "Задан объект для распределения");
+    }
+
+    function SetDistributionStep () {
+      var step = document.getElementById('distStep').value || '';
+      ACAPI.SetDistributionStep(step);
+      setInfo("info-dist", "Задано расстояние: " + step);
+    }
+
+    function SetDistributionCount () {
+      var count = document.getElementById('distCount').value || '';
+      ACAPI.SetDistributionCount(count);
+      setInfo("info-dist", "Задано количество: " + count);
+    }
+
+    function OrientObjectsToPoint () {
+      ACAPI.OrientObjectsToPoint();
+      setInfo("info-orient", "Объекты сориентированы на точку");
+    }
+
+    // --- Новый блок: Приземление ---
+    function SetGroundSurface () {
+      ACAPI.SetGroundSurface();
+      setInfo("info-ground", "Задана поверхность для приземления");
+    }
+
+    function SetGroundObjects () {
+      ACAPI.SetGroundObjects();
+      setInfo("info-ground", "Заданы объекты для приземления");
+    }
+
+    function ApplyGroundOffset () {
+      var offset = document.getElementById('groundOffset').value || '0';
+      ACAPI.ApplyGroundOffset(offset);
+      setInfo("info-ground", "Приземление с учётом смещения по Z = " + offset);
+    }
+
+    // Enter в поле угла = нажать OK
+    window.addEventListener('DOMContentLoaded', function () {
+      var angle = document.getElementById('rotateAngle');
+      angle.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          RotateSelection();
+        }
+      });
+    });
+  </script>
+</head>
+
+<body>
+  <!-- Таблица выделения -->
+  <table class="selection-table">
+    <thead>
+      <tr>
+        <th colspan="3">Выбранные элементы:</th>
+      </tr>
+      <tr>
+        <th>Тип</th>
+        <th>Элемент ID</th>
+        <th>Количество</th>
+      </tr>
+    </thead>
+    <tbody id="selection">
+      <tr>
+        <td colspan="3">Нет выбранных элементов</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Блок: Создание по кривой -->
+  <fieldset class="control-block">
+    <legend>Создание по кривой</legend>
+    <div>
+      <label>Ширина перекрытия:</label>
+      <input type="number" id="slabWidth" step="1">
+      <input type="button" onclick="CreateSlabAlongCurve()" value="Перекрытие">
+    </div>
+    <div>
+      <label>Ширина оболочки:</label>
+      <input type="number" id="shellWidth" step="1">
+      <input type="button" onclick="CreateShellAlongCurve()" value="Оболочка">
+    </div>
+    <div style="margin-top:6px; text-align:center;">
+      <input type="checkbox" id="useMesh"> Проецировать на 3D сетку
+    </div>
+    <div id="info-curve" class="info-box">Подсказка: выберите линию и задайте параметры</div>
+  </fieldset>
+
+  <!-- Блок: Распределение -->
+  <fieldset class="control-block">
+    <legend>Распределение</legend>
+    <div style="text-align:center;">
+      <input type="button" onclick="SetDistributionLine()" value="Задать линию"><br><br>
+      <input type="button" onclick="SetDistributionObject()" value="Задать объект">
+    </div>
+    <div>
+      <label>Расстояние:</label>
+      <input type="number" id="distStep" step="1">
+      <input type="button" onclick="SetDistributionStep()" value="OK">
+    </div>
+    <div>
+      <label>Количество:</label>
+      <input type="number" id="distCount" step="1">
+      <input type="button" onclick="SetDistributionCount()" value="OK">
+    </div>
+    <div id="info-dist" class="info-box">Подсказка: задайте линию, объект и шаг или количество</div>
+  </fieldset>
+
+  <!-- Блок: Ориентация -->
+  <fieldset class="control-block">
+    <legend>Ориентация</legend>
+    <div>
+      <label for="rotateAngle">Угол поворота:</label>
+      <input type="number" id="rotateAngle" step="1">
+      <input type="button" onclick="RotateSelection()" value="Повернуть">
+    </div>
+    <div style="text-align:center; margin-top:10px;">
+      <input type="button" onclick="AlignSelectionX()" value="Выровнять по X"><br><br>
+      <input type="button" onclick="RandomizeAngles()" value="Случайный угол (0–360°)"><br><br>
+      <input type="button" onclick="OrientObjectsToPoint()" value="Сориентировать на точку">
+    </div>
+    <div id="info-orient" class="info-box">Подсказка: задайте угол или выберите действие</div>
+  </fieldset>
+
+  <!-- Блок: Приземление -->
+  <fieldset class="control-block">
+    <legend>Приземление объектов</legend>
+    <div style="text-align:center;">
+      <input type="button" onclick="SetGroundSurface()" value="Задать поверхность"><br><br>
+      <input type="button" onclick="SetGroundObjects()" value="Задать приземляемые">
+    </div>
+    <div>
+      <label>Смещение по Z:</label>
+      <input type="number" id="groundOffset" step="1" value="0">
+      <input type="button" onclick="ApplyGroundOffset()" value="OK">
+    </div>
+    <div id="info-ground" class="info-box">Подсказка: выберите поверхность и объекты, задайте смещение</div>
+  </fieldset>
+
+  <a href="https://www.227.info">www.227.info</a>
+</body>
+</html>

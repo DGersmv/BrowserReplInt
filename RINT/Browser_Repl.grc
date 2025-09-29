@@ -1,0 +1,24 @@
+﻿/* *****************************************************************************
+// Localizable resource description
+// ****************************************************************************/
+
+'STR#' 32000 "Add-on Name and Description" {
+/* [  1] */		"Browser Replication"
+/* [  2] */		"Browser Repl Ver1"
+}
+
+'STR#' 32500 "Strings for the Menu" {
+/* [   ] */		"DG277"
+/* [   ] */		"Browser Control"
+/* [  1] */			"Selection Handler Palette^ES^EE^EI^ED^EW^E3^EL"
+}
+
+/* --- Dockable browser palette ----------------------------------------------*/
+
+'GDLG'  32500    Palette | topCaption | close | grow   0   0  450  150  "Selection Handler"  {
+/* [  1] */ Browser			0   0  450  150
+}
+
+'DLGH'  32500  DLG_32500_Browser_Repl {
+1	"Browser Control"		Browser_0
+}
