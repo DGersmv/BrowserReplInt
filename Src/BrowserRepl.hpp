@@ -19,7 +19,7 @@
 // --- Class declaration: BrowserPalette ------------------------------------------
 
 class BrowserRepl final : public DG::Palette,
-							 public DG::PanelObserver
+	public DG::PanelObserver
 {
 public:
 	enum SelectionModification { RemoveFromSelection, AddToSelection };
@@ -37,36 +37,36 @@ protected:
 
 	DG::Browser		browser;
 
-	void InitBrowserControl ();
-	void RegisterACAPIJavaScriptObject ();
-	void UpdateSelectedElementsOnHTML ();
-	void SetMenuItemCheckedState (bool);
+	void InitBrowserControl();
+	void RegisterACAPIJavaScriptObject();
+	void UpdateSelectedElementsOnHTML();
+	void SetMenuItemCheckedState(bool);
 
-	virtual void PanelResized (const DG::PanelResizeEvent& ev) override;
-	virtual	void PanelCloseRequested (const DG::PanelCloseRequestEvent& ev, bool* accepted) override;
+	virtual void PanelResized(const DG::PanelResizeEvent& ev) override;
+	virtual	void PanelCloseRequested(const DG::PanelCloseRequestEvent& ev, bool* accepted) override;
 
-	static GS::Array<BrowserRepl::ElementInfo> GetSelectedElements ();
-	static void ModifySelection (const GS::UniString& elemGuidStr, SelectionModification modification);
+	static GS::Array<BrowserRepl::ElementInfo> GetSelectedElements();
+	static void ModifySelection(const GS::UniString& elemGuidStr, SelectionModification modification);
 
-	static GSErrCode __ACENV_CALL	PaletteControlCallBack (Int32 paletteId, API_PaletteMessageID messageID, GS::IntPtr param);
+	static GSErrCode __ACENV_CALL	PaletteControlCallBack(Int32 paletteId, API_PaletteMessageID messageID, GS::IntPtr param);
 
 	static GS::Ref<BrowserRepl> instance;
 
-	BrowserRepl ();
+	BrowserRepl();
 
 public:
-	virtual ~BrowserRepl ();
+	virtual ~BrowserRepl();
 
-	static bool				HasInstance ();
-	static void				CreateInstance ();
-	static BrowserRepl&	GetInstance ();
-	static void				DestroyInstance ();
+	static bool				HasInstance();
+	static void				CreateInstance();
+	static BrowserRepl& GetInstance();
+	static void				DestroyInstance();
 
-	void Show ();
-	void Hide ();
+	void Show();
+	void Hide();
 
-	static GSErrCode				RegisterPaletteControlCallBack ();
-	static GSErrCode __ACENV_CALL	SelectionChangeHandler (const API_Neig*);
+	static GSErrCode				RegisterPaletteControlCallBack();
+	static GSErrCode __ACENV_CALL	SelectionChangeHandler(const API_Neig*);
 };
 
 #endif // BROWSERREPL_HPP
