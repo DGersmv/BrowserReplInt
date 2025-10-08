@@ -2,6 +2,7 @@
 <html>
 <head>
   <title>Selection Test</title>
+  <meta charset="UTF-8">
 
   <style>
     body {
@@ -154,19 +155,119 @@ function OrientObjectsToPoint() {
   setInfo("info-orient", "Сориентированы на точку");
 }
 
+function AddLog(msg) {
+  var box = document.getElementById('log-box');
+  var now = new Date().toLocaleTimeString();
+  box.innerText += "\n[" + now + "] " + msg;
+  box.scrollTop = box.scrollHeight;
+}
+
 
     function SetDistributionLine(){ACAPI.SetDistributionLine();setInfo("info-dist","Линия задана");}
     function SetDistributionObject(){ACAPI.SetDistributionObject();setInfo("info-dist","Объект задан");}
-    function SetDistributionStep(){var s=document.getElementById('distStep').value;ACAPI.SetDistributionStep(s);setInfo("info-dist","Шаг="+s);}
-    function SetDistributionCount(){var c=document.getElementById('distCount').value;ACAPI.SetDistributionCount(c);setInfo("info-dist","Количество="+c);}
-    function DistributeNow(){var s=document.getElementById('distStep').value;var c=document.getElementById('distCount').value;var p=s?("step:"+s):("count:"+c);ACAPI.DistributeNow(p).then(ok=>setInfo("info-dist",ok?"✔ Выполнено":"❌ Ошибка"));}
+    function SetDistributionStep () {
+  const raw = (document.getElementById('distStep').value || "0").toString().replace(',', '.');
+  const s = parseFloat(raw);
+  const step = (isFinite(s) && s > 0) ? s : 0;
+
+  ACAPI.SetDistributionStep(step);
+  if (step > 0) {
+    const payload = "step:" + step;
+    AddLog("[UI] Step OK → " + payload);
+    ACAPI.DistributeNow(payload).then(ok => {
+      setInfo("info-dist", ok ? "✔ Разложено по шагу" : "❌ Ошибка раскладки");
+    });
+  } else {
+    setInfo("info-dist", "Шаг должен быть > 0");
+  }
+}
+
+function SetDistributionCount () {
+  const raw = (document.getElementById('distCount').value || "0").toString();
+  const c = parseInt(raw, 10);
+  const count = (isFinite(c) && c > 0) ? c : 0;
+
+  ACAPI.SetDistributionCount(count);
+  if (count > 0) {
+    const payload = "count:" + count;
+    AddLog("[UI] Count OK → " + payload);
+    ACAPI.DistributeNow(payload).then(ok => {
+      setInfo("info-dist", ok ? "✔ Разложено по количеству" : "❌ Ошибка раскладки");
+    });
+  } else {
+    setInfo("info-dist", "Количество должно быть ≥ 1");
+  }
+}
+
+// (по желанию) Enter в инпуте = нажать OK
+document.addEventListener('DOMContentLoaded', () => {
+  const step = document.getElementById('distStep');
+  const cnt  = document.getElementById('distCount');
+  step.addEventListener('keydown', e => { if (e.key === 'Enter') SetDistributionStep(); });
+  cnt.addEventListener('keydown',  e => { if (e.key === 'Enter') SetDistributionCount(); });
+});
+
+
+
+
 
     function SetGroundSurface(){ACAPI.SetGroundSurface();setInfo("info-ground","Поверхность выбрана");}
     function SetGroundObjects(){ACAPI.SetGroundObjects();setInfo("info-ground","Объекты выбраны");}
     function ApplyGroundOffset(){var z=document.getElementById('groundOffset').value;ACAPI.ApplyGroundOffset(z);setInfo("info-ground","Приземление Z="+z);}
+	
+function GroundLanding() {
+  var el = document.getElementById('groundOffset');
 
-    function CreateSlabAlongCurve(){var w=document.getElementById('slabWidth').value;ACAPI.CreateSlabAlongCurve(w);setInfo("info-build","Перекрытие, ширина="+w);}
-    function CreateShellAlongCurve(){var w=document.getElementById('shellWidth').value;ACAPI.CreateShellAlongCurve(w,"line");setInfo("info-build","Оболочка, ширина="+w);}
+  // 1) сначала пробуем встроенный valueAsNumber
+  var z = (typeof el.valueAsNumber === 'number' && !isNaN(el.valueAsNumber))
+            ? el.valueAsNumber
+            : NaN;
+
+  // 2) если не вышло — парсим строку вручную (замена запятой на точку)
+  if (isNaN(z)) {
+    var raw = (el.value || "0").toString().replace(',', '.');
+    var parsed = parseFloat(raw);
+    z = isNaN(parsed) ? 0 : parsed;
+  }
+
+  AddLog("[UI] GroundLanding z=" + z);   // теперь увидишь реальное, что ушло в C++
+
+  ACAPI.SetGroundSurface().then(function (ok1) {
+    AddLog(ok1 ? "[UI] Mesh detected" : "[UI] No Mesh in selection");
+    if (!ok1) return;
+
+    ACAPI.SetGroundObjects().then(function (ok2) {
+      AddLog(ok2 ? "[UI] Objects collected" : "[UI] No objects to land");
+      if (!ok2) return;
+
+      ACAPI.ApplyGroundOffset(z).then(function (ok3) {
+        AddLog(ok3 ? "[UI] Landing done" : "[UI] Landing failed");
+      });
+    });
+  });
+}
+
+
+
+    function CreateSlabAlongCurve(){
+  var raw = document.getElementById('slabWidth').value || "0";
+  var w = parseFloat(raw.toString().replace(',', '.')) || 0;
+  ACAPI.CreateSlabAlongCurve(w);
+  setInfo("info-build","Перекрытие, ширина="+ w);
+}
+    
+function CreateShellAlongCurve(){
+  var raw = document.getElementById('shellWidth').value || "0";
+  var w = parseFloat(raw.toString().replace(',', '.')) || 0;
+  ACAPI.CreateShellAlongCurve(w);
+  setInfo("info-build","Оболочка, ширина="+ w);
+}
+
+function GenerateGDLFromSelection() {
+  ACAPI.GenerateGDLFromSelection().then(function (code) {
+    document.getElementById('gdlOutput').value = code || "Ничего не выделено или не поддерживается";
+  });
+}
 
     // вкладки
     function openTab(evt, tabId) {
@@ -193,6 +294,7 @@ function OrientObjectsToPoint() {
     <button class="tablink" onclick="openTab(event,'tab-distrib')">Распределение</button>
     <button class="tablink" onclick="openTab(event,'tab-orient')">Ориентация</button>
     <button class="tablink" onclick="openTab(event,'tab-ground')">Приземление</button>
+	<button class="tablink" onclick="openTab(event,'tab-gdl')">GDL</button>
   </div>
 
   <!-- Построение -->
@@ -204,7 +306,7 @@ function OrientObjectsToPoint() {
       </div>
       <div>
         <label>Ширина:</label>
-        <input type="number" id="slabWidth" step="1" value="0">
+        <input type="number" id="slabWidth" step="1" value="1000">
         <input type="button" onclick="CreateSlabAlongCurve()" value="Построить Перекрытие">
       </div>
     </fieldset>
@@ -217,7 +319,7 @@ function OrientObjectsToPoint() {
       </div>
       <div>
         <label>Ширина:</label>
-        <input type="number" id="shellWidth" step="1" value="0">
+        <input type="number" id="shellWidth" step="1" value="1000">
         <input type="button" onclick="CreateShellAlongCurve()" value="OK">
       </div>
       <div style="text-align:center; margin-top:10px;">
@@ -245,9 +347,7 @@ function OrientObjectsToPoint() {
         <input type="number" id="distCount" step="1" value="1">
         <input type="button" onclick="SetDistributionCount()" value="OK">
       </div>
-      <div style="text-align:center; margin-top:10px;">
-        <input type="button" onclick="DistributeNow()" value="Распределить">
-      </div>
+      
       <div id="info-dist" class="info-box">Подсказка: задайте параметры</div>
     </fieldset>
   </div>
@@ -270,22 +370,38 @@ function OrientObjectsToPoint() {
   </fieldset>
 </div>
 
-  <!-- Приземление -->
-  <div id="tab-ground" class="tabcontent">
-    <fieldset class="control-block">
-      <legend>Приземление</legend>
-      <div style="text-align:center;">
-        <input type="button" onclick="SetGroundSurface()" value="Задать поверхность"><br><br>
-        <input type="button" onclick="SetGroundObjects()" value="Задать объекты">
-      </div>
-      <div>
-        <label>Смещение Z:</label>
-        <input type="number" id="groundOffset" step="1" value="0">
-        <input type="button" onclick="ApplyGroundOffset()" value="OK">
-      </div>
-      <div id="info-ground" class="info-box">Подсказка: выберите поверхность и смещение</div>
-    </fieldset>
-  </div>
+<!-- Приземление -->
+<div id="tab-ground" class="tabcontent">
+  <fieldset class="control-block">
+    <legend>Приземление</legend>
+    <div style="text-align:center; margin-bottom:10px;">
+      <label>Смещение Z:</label>
+      <input type="number" id="groundOffset" step="1" value="0">
+    </div>
+    <div style="text-align:center;">
+      <input type="button" onclick="GroundLanding()" value="Приземлить">
+    </div>
+    <div id="info-ground" class="info-box">
+      Подсказка: выделите Поверхость (3D Сетка + объекты ), задайте смещение и нажмите "Приземлить".
+    </div>
+  </fieldset>
+</div>
+
+<!-- GDL -->
+<div id="tab-gdl" class="tabcontent">
+  <fieldset class="control-block">
+    <legend>GDL-код из выделения</legend>
+    <div style="text-align:center;">
+      <input type="button" onclick="GenerateGDLFromSelection()" value="Создать GDL">
+    </div>
+    <textarea id="gdlOutput" style="width:95%;height:200px;margin-top:10px;font-family:monospace;"></textarea>
+  </fieldset>
+</div>
+
+
+<div id="log-box" style="margin-top:10px; padding:8px; background:#111; color:#0f0; font-family:monospace; font-size:12px; height:100px; overflow:auto;">
+  [Лог плагина будет здесь]
+</div>
 
   <a href="https://www.227.info">www.227.info</a>
 </body>

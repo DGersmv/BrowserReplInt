@@ -1,72 +1,47 @@
-// *****************************************************************************
-// Header file for BrowserPalette class
-// *****************************************************************************
-
 #ifndef BROWSERREPL_HPP
 #define BROWSERREPL_HPP
 
-// ---------------------------------- Includes ---------------------------------
-
-#include "APIEnvir.h"
-#include "ACAPinc.h"		// also includes APIdefs.h
 #include "DGModule.hpp"
+#include "APIEnvir.h"
+#include "ACAPinc.h"
+#include "ResourceIDs.hpp"
+#include "DGDefs.h"
 #include "DGBrowser.hpp"
 
-#define BrowserReplResId 32500
-#define BrowserReplMenuResId 32500
-#define BrowserReplMenuItemIndex 1
-
-// --- Class declaration: BrowserPalette ------------------------------------------
-
-class BrowserRepl final : public DG::Palette,
-	public DG::PanelObserver
-{
+// Класс BrowserRepl управляет палитрой и встроенным браузером
+class BrowserRepl : public DG::Palette, public DG::PanelObserver {
 public:
-	enum SelectionModification { RemoveFromSelection, AddToSelection };
+    BrowserRepl();
+    ~BrowserRepl();
 
-	struct ElementInfo {
-		GS::UniString	guidStr;
-		GS::UniString	typeName;
-		GS::UniString	elemID;
-	};
+    static bool HasInstance();
+    static void CreateInstance();
+    static BrowserRepl& GetInstance();
+    static void DestroyInstance();
 
-protected:
-	enum {
-		BrowserId = 1
-	};
+    void Show();
+    void Hide();
+    void InitBrowserControl();
 
-	DG::Browser		browser;
+    void UpdateSelectedElementsOnHTML();
+    static GSErrCode __ACENV_CALL SelectionChangeHandler(const API_Neig*);
+    static GSErrCode __ACENV_CALL PaletteControlCallBack(Int32 referenceID, API_PaletteMessageID messageID, GS::IntPtr param);
 
-	void InitBrowserControl();
-	void RegisterACAPIJavaScriptObject();
-	void UpdateSelectedElementsOnHTML();
-	void SetMenuItemCheckedState(bool);
+    static GSErrCode RegisterPaletteControlCallBack();
 
-	virtual void PanelResized(const DG::PanelResizeEvent& ev) override;
-	virtual	void PanelCloseRequested(const DG::PanelCloseRequestEvent& ev, bool* accepted) override;
+    // --- Новый публичный метод для логов ---
+    void LogToBrowser(const GS::UniString& msg);
 
-	static GS::Array<BrowserRepl::ElementInfo> GetSelectedElements();
-	static void ModifySelection(const GS::UniString& elemGuidStr, SelectionModification modification);
+private:
+    static GS::Ref<BrowserRepl> instance;
+    DG::Browser browser;   // приватный браузер
 
-	static GSErrCode __ACENV_CALL	PaletteControlCallBack(Int32 paletteId, API_PaletteMessageID messageID, GS::IntPtr param);
+    void RegisterACAPIJavaScriptObject();
+    void SetMenuItemCheckedState(bool isChecked);
 
-	static GS::Ref<BrowserRepl> instance;
-
-	BrowserRepl();
-
-public:
-	virtual ~BrowserRepl();
-
-	static bool				HasInstance();
-	static void				CreateInstance();
-	static BrowserRepl& GetInstance();
-	static void				DestroyInstance();
-
-	void Show();
-	void Hide();
-
-	static GSErrCode				RegisterPaletteControlCallBack();
-	static GSErrCode __ACENV_CALL	SelectionChangeHandler(const API_Neig*);
+    // DG overrides
+    void PanelResized(const DG::PanelResizeEvent& ev) override;
+    void PanelCloseRequested(const DG::PanelCloseRequestEvent& ev, bool* accepted) override;
 };
 
 #endif // BROWSERREPL_HPP
