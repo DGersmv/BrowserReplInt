@@ -276,13 +276,12 @@ void BrowserRepl::RegisterACAPIJavaScriptObject()
         if (GS::Ref<JS::Value> v = GS::DynamicCast<JS::Value>(param)) {
             switch (v->GetType()) {
             case JS::Value::DOUBLE:
-            case JS::Value::INTEGER:    // <-- ВАЖНО: целые тоже поддерживаем
+            case JS::Value::INTEGER:
                 offset = v->GetDouble();
                 break;
             case JS::Value::STRING: {
                 GS::UniString s = v->GetString();
-                for (UIndex i = 0; i < s.GetLength(); ++i)
-                    if (s[i] == ',') s[i] = '.';
+                for (UIndex i = 0; i < s.GetLength(); ++i) if (s[i] == ',') s[i] = '.';
                 double parsed = 0.0;
                 std::sscanf(s.ToCStr().Get(), "%lf", &parsed);
                 offset = parsed;
@@ -292,8 +291,18 @@ void BrowserRepl::RegisterACAPIJavaScriptObject()
             }
         }
 
-        // Диагностика: что реально пришло на C++
-        GS::UniString dbg; dbg.Printf("[JS->C++] ApplyGroundOffset param=%.6f", offset);
+        // --- Автодетект единиц (страховка):
+        // если пришло что-то по масштабe похоже на миллиметры (например 1500),
+        // переводим в метры.
+        bool unitWasMM = false;
+        if (std::fabs(offset) > 100.0) {   // порог можно подправить под твои проекты
+            offset /= 1000.0;
+            unitWasMM = true;
+        }
+
+        // Диагностика
+        GS::UniString dbg; dbg.Printf("[JS->C++] ApplyGroundOffset parsed=%.6f %s",
+            offset, unitWasMM ? "(auto mm to m)" : "(m)");
         if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser(dbg);
         ACAPI_WriteReport("%s", false, dbg.ToCStr().Get());
 

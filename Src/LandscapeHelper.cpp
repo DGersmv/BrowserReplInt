@@ -13,9 +13,10 @@ namespace LandscapeHelper {
 
 	constexpr double PI = 3.14159265358979323846;
 
-	static API_Guid  g_pathGuid = APINULLGuid;
+	// ---------- Глобальные (множественные пути) ----------
+	static std::vector<API_Guid> g_pathGuids;
 	static API_Guid  g_protoGuid = APINULLGuid;
-	static double    g_step = 0.0; // мм (из UI)
+	static double    g_stepM = 0.0; // ВНУТРИ: метры (UI → мм → м)
 	static int       g_count = 1;
 
 	static inline void LogA(const char* s) {
@@ -26,14 +27,16 @@ namespace LandscapeHelper {
 		if (BrowserRepl::HasInstance())
 			BrowserRepl::GetInstance().LogToBrowser(s);
 	}
+	static inline double UiStepToMeters(double stepMm) { return stepMm / 1000.0; }
 
+	// ---------- Геометрия ----------
 	struct Seg {
 		enum Kind { Line, Arc } kind;
 		API_Coord a{}, b{};   // Line
 		API_Coord c{};        // Arc: center
 		double    r = 0.0;
 		double    a0 = 0.0;   // start angle
-		double    a1 = 0.0;   // end   angle (a1-a0 = signed sweep)
+		double    a1 = 0.0;   // end angle (a1 - a0 = signed sweep)
 		double    L = 0.0;   // length
 	};
 
@@ -82,7 +85,7 @@ namespace LandscapeHelper {
 		const Int32 nPts = std::max<Int32>(0, nAll - 1);            // валидные 1..nPts
 		if (nPts < 2) return;
 
-		// «концы» цепочек (для полилинии/многоконтурных) — это Int32, а не структура
+		// «концы» цепочек (многоконтур/разрывы) — Int32
 		std::vector<Int32> ends;
 		if (memo.pends != nullptr) {
 			const Int32 nEnds = (Int32)(BMGetHandleSize((GSHandle)memo.pends) / sizeof(Int32));
@@ -118,7 +121,7 @@ namespace LandscapeHelper {
 			const double angArc = arcByBeg[i];
 			if (std::fabs(angArc) < 1e-9) { PushLine(out, A, B); continue; }
 
-			// две возможные окружности — берём ту, где свип совпадает по знаку и модулю с arcAngle
+			// две возможные окружности — выбираем ту, у которой sweep по знаку/модулю ближе к arcAngle
 			const double dx = B.x - A.x, dy = B.y - A.y;
 			const double chord = std::hypot(dx, dy);
 			if (chord < 1e-9) continue;
@@ -128,20 +131,19 @@ namespace LandscapeHelper {
 			const double nx = -dy / chord, ny = dx / chord;
 			const double d = std::sqrt(std::max(r * r - 0.25 * chord * chord, 0.0));
 
-			struct Cand { API_Coord c; double a0, a1, L; bool ok; };
+			struct Cand { API_Coord c; double a0, a1, L; };
 			auto makeCand = [&](double sx, double sy) -> Cand {
 				const double cx = mx + sx * d, cy = my + sy * d;
 				const double aA = std::atan2(A.y - cy, A.x - cx);
 				const double aB = std::atan2(B.y - cy, B.x - cx);
 				double sweep = (angArc > 0.0) ? CCWDelta(aA, aB) : -CCWDelta(aB, aA);
-				Cand cnd; cnd.c = { cx, cy }; cnd.a0 = aA; cnd.a1 = aA + sweep; cnd.L = r * std::fabs(sweep); cnd.ok = true;
+				Cand cnd; cnd.c = { cx, cy }; cnd.a0 = aA; cnd.a1 = aA + sweep; cnd.L = r * std::fabs(sweep);
 				return cnd;
 				};
 
-			Cand c1 = makeCand(nx, ny);
-			Cand c2 = makeCand(-nx, -ny);
+			const Cand c1 = makeCand(nx, ny);
+			const Cand c2 = makeCand(-nx, -ny);
 
-			// выбираем кандидата, чья дуга ближе к требуемому углу
 			const double d1 = std::fabs((c1.a1 - c1.a0) - angArc);
 			const double d2 = std::fabs((c2.a1 - c2.a0) - angArc);
 			const Cand& best = (d1 <= d2 ? c1 : c2);
@@ -192,6 +194,7 @@ namespace LandscapeHelper {
 		}
 
 		case API_SplineID: {
+			// Кубические Безье по bezierDirs (качественно + предсказуемо)
 			API_ElementMemo memo = {};
 			if (ACAPI_Element_GetMemo(pathGuid, &memo, APIMemoMask_Polygon) == NoError &&
 				memo.coords != nullptr && memo.bezierDirs != nullptr)
@@ -205,7 +208,8 @@ namespace LandscapeHelper {
 						const API_SplineDir d1 = (*memo.bezierDirs)[i + 1];
 						const API_Coord C1 = Add(P0, FromAngLen(d0.dirAng, d0.lenNext));
 						const API_Coord C2 = Sub(P3, FromAngLen(d1.dirAng, d1.lenPrev));
-						const int N = 32;
+
+						const int N = 32; // сабсегментов на ребро
 						API_Coord prev = P0;
 						for (int k = 1; k <= N; ++k) {
 							const double t = (double)k / (double)N;
@@ -265,29 +269,48 @@ namespace LandscapeHelper {
 		}
 	}
 
-	// ============= Автоподхват =============
-	static bool AutoGrabPathIfNeeded() {
-		if (g_pathGuid != APINULLGuid) return true;
+	// ---------- Утилиты выбора ----------
+	static inline bool IsPathType(API_ElemTypeID tid) {
+		switch (tid) {
+		case API_LineID:
+		case API_ArcID:
+		case API_CircleID:
+		case API_PolyLineID:
+		case API_SplineID:
+			return true;
+		default:
+			return false;
+		}
+	}
+
+	static bool AutoGrabPathsIfNeeded() {
+		if (!g_pathGuids.empty()) return true;
+
 		API_SelectionInfo si = {}; GS::Array<API_Neig> neigs;
 		ACAPI_Selection_Get(&si, &neigs, false, false);
 		BMKillHandle((GSHandle*)&si.marquee.coords);
+
 		for (const API_Neig& n : neigs) {
 			API_Element el = {}; el.header.guid = n.guid;
 			if (ACAPI_Element_GetHeader(&el.header) != NoError) continue;
-			switch (el.header.type.typeID) {
-			case API_LineID: case API_ArcID: case API_CircleID:
-			case API_PolyLineID: case API_SplineID:
-				g_pathGuid = n.guid; LogA("[Distrib] PATH AUTOGRAB"); return true;
-			default: break;
-			}
+			if (IsPathType(el.header.type.typeID)) g_pathGuids.push_back(n.guid);
+		}
+
+		if (!g_pathGuids.empty()) {
+			GS::UniString dbg; dbg.Printf("[Distrib] PATH AUTOGRAB, count=%u", (unsigned)g_pathGuids.size());
+			Log(dbg);
+			return true;
 		}
 		return false;
 	}
+
 	static bool AutoGrabProtoIfNeeded() {
 		if (g_protoGuid != APINULLGuid) return true;
+
 		API_SelectionInfo si = {}; GS::Array<API_Neig> neigs;
 		ACAPI_Selection_Get(&si, &neigs, false, false);
 		BMKillHandle((GSHandle*)&si.marquee.coords);
+
 		for (const API_Neig& n : neigs) {
 			API_Element el = {}; el.header.guid = n.guid;
 			if (ACAPI_Element_GetHeader(&el.header) != NoError) continue;
@@ -299,29 +322,36 @@ namespace LandscapeHelper {
 		return false;
 	}
 
-	// ============= Публичные API =============
-	bool SetDistributionLine() {
+	// ---------- Публичные API ----------
+	bool SetDistributionLine()
+	{
+		g_pathGuids.clear();
+
 		API_SelectionInfo si = {}; GS::Array<API_Neig> neigs;
 		ACAPI_Selection_Get(&si, &neigs, false, false);
 		BMKillHandle((GSHandle*)&si.marquee.coords);
+
 		for (const API_Neig& n : neigs) {
 			API_Element el = {}; el.header.guid = n.guid;
 			if (ACAPI_Element_GetHeader(&el.header) != NoError) continue;
-			switch (el.header.type.typeID) {
-			case API_LineID: case API_ArcID: case API_CircleID:
-			case API_PolyLineID: case API_SplineID:
-				g_pathGuid = n.guid; LogA("[Distrib] PATH SET"); return true;
-			default: break;
-			}
+			if (IsPathType(el.header.type.typeID)) g_pathGuids.push_back(n.guid);
+		}
+
+		if (!g_pathGuids.empty()) {
+			GS::UniString dbg; dbg.Printf("[Distrib] PATH SET, count=%u", (unsigned)g_pathGuids.size());
+			Log(dbg);
+			return true;
 		}
 		LogA("[Distrib] ERR no-path");
 		return false;
 	}
 
-	bool SetDistributionObject() {
+	bool SetDistributionObject()
+	{
 		API_SelectionInfo si = {}; GS::Array<API_Neig> neigs;
 		ACAPI_Selection_Get(&si, &neigs, false, false);
 		BMKillHandle((GSHandle*)&si.marquee.coords);
+
 		for (const API_Neig& n : neigs) {
 			API_Element el = {}; el.header.guid = n.guid;
 			if (ACAPI_Element_GetHeader(&el.header) != NoError) continue;
@@ -334,15 +364,17 @@ namespace LandscapeHelper {
 		return false;
 	}
 
-	bool SetDistributionStep(double stepMM) {
+	bool SetDistributionStep(double stepMM)
+	{
 		if (stepMM > 0.0) {
-			g_step = stepMM;
-			GS::UniString m; m.Printf("[Distrib] step(mm)=%.3f", stepMM); Log(m);
+			g_stepM = UiStepToMeters(stepMM);
+			GS::UniString m; m.Printf("[Distrib] step(mm)=%.3f  step(m)=%.6f", stepMM, g_stepM); Log(m);
 			return true;
 		}
 		return false;
 	}
-	bool SetDistributionCount(int count) {
+	bool SetDistributionCount(int count)
+	{
 		if (count >= 1) {
 			g_count = count;
 			GS::UniString m; m.Printf("[Distrib] count=%d", count); Log(m);
@@ -351,71 +383,100 @@ namespace LandscapeHelper {
 		return false;
 	}
 
-	bool DistributeSelected(double stepMM, int count) {
-		double useStepMM = 0.0; int useCount = 0;
-		if (stepMM > 1e-9) { g_step = stepMM; useStepMM = stepMM; useCount = 0; }
-		else if (count >= 1) { g_count = count; useStepMM = 0.0;   useCount = count; g_step = 0.0; }
-		else { useStepMM = g_step; useCount = g_count; }
-
-		{
-			GS::UniString dbg; dbg.Printf("[Distrib] use: %s; step(mm)=%.3f; count=%d",
-				useStepMM > 0.0 ? "STEP" : "COUNT", useStepMM, useCount); Log(dbg);
-		}
-
-		if (!AutoGrabPathIfNeeded()) { LogA("[Distrib] ERR no-path");  return false; }
-		if (!AutoGrabProtoIfNeeded()) { LogA("[Distrib] ERR no-proto"); return false; }
-		if (useStepMM <= 0.0 && useCount < 1) { LogA("[Distrib] ERR invalid-params"); return false; }
-
-		std::vector<Seg> segs; double totalLen = 0.0;
-		if (!BuildPathSegments(g_pathGuid, segs, &totalLen) || totalLen < 1e-6) {
-			LogA("[Distrib] ERR empty-path"); return false;
-		}
-
-		API_Element proto = {}; proto.header.guid = g_protoGuid;
-		if (ACAPI_Element_Get(&proto) != NoError) { LogA("[Distrib] ERR proto-get"); return false; }
-		const API_ElemTypeID tid = proto.header.type.typeID;
-		if (tid != API_ObjectID && tid != API_LampID && tid != API_ColumnID) { LogA("[Distrib] ERR proto-type"); return false; }
-
+	static bool DistributeOnSinglePath(const API_Element& proto, API_ElemTypeID tid,
+		const std::vector<Seg>& segs, double totalLen,
+		const double useStepM, const int useCount,
+		API_ElementMemo* protoMemo, UInt32* outCreated)
+	{
+		// точки размещения
 		std::vector<double> sVals;
-		const double stepM = (useStepMM > 1e-9) ? (useStepMM * 0.001) : 0.0; // мм → м
-		if (stepM > 1e-9) {
-			for (double s = 0.0; s <= totalLen + 1e-9; s += stepM)
+		if (useStepM > 1e-9) {
+			for (double s = 0.0; s <= totalLen + 1e-9; s += useStepM)
 				sVals.push_back(std::min(s, totalLen));
-			if (sVals.size() == 1) LogA("[Distrib] HINT: path shorter than step! only start point");
 		}
 		else {
 			if (useCount == 1) sVals.push_back(0.0);
 			else {
 				const double st = totalLen / (double)(useCount - 1);
-				for (int i = 0; i < useCount; ++i) sVals.push_back(std::min(st * i, totalLen));
+				for (int i = 0; i < useCount; ++i)
+					sVals.push_back(std::min(st * i, totalLen));
 			}
 		}
-		{ GS::UniString dbg; dbg.Printf("[Distrib] positions(plan)=%u", (unsigned)sVals.size()); Log(dbg); }
 
-		GSErrCode err = ACAPI_CallUndoableCommand("Distribute Along Path", [&]() -> GSErrCode {
-			API_ElementMemo memo = {}; bool hasMemo = false;
-			if (tid == API_ObjectID || tid == API_LampID)
-				if (ACAPI_Element_GetMemo(proto.header.guid, &memo) == NoError) hasMemo = true;
+		UInt32 created = 0;
+		for (double s : sVals) {
+			API_Coord P; double ang = 0.0;
+			EvalOnPath(segs, s, &P, &ang);
 
-			UInt32 created = 0;
-			for (double s : sVals) {
-				API_Coord P; double ang = 0.0;
-				EvalOnPath(segs, s, &P, &ang);
+			API_Element e = proto; e.header.guid = APINULLGuid;
 
-				API_Element e = proto; e.header.guid = APINULLGuid;
-				if (tid == API_ObjectID) { e.object.pos = P;   e.object.angle = ang; }
-				else if (tid == API_LampID) { e.lamp.pos = P;   e.lamp.angle = ang; }
-				else { e.column.origoPos = P; e.column.axisRotationAngle = ang; }
+			if (tid == API_ObjectID) { e.object.pos = P;  e.object.angle = ang; }
+			else if (tid == API_LampID) { e.lamp.pos = P;  e.lamp.angle = ang; }
+			else /* Column */ { e.column.origoPos = P; e.column.axisRotationAngle = ang; }
 
-				const GSErrCode ce = ACAPI_Element_Create(&e, hasMemo ? &memo : nullptr);
-				if (ce == NoError) ++created;
-				else { GS::UniString msg; msg.Printf("[Distrib] Create err=%d", (int)ce); Log(msg); }
+			const GSErrCode ce = ACAPI_Element_Create(&e, protoMemo);
+			if (ce == NoError) ++created;
+			else {
+				GS::UniString msg; msg.Printf("[Distrib] Create err=%d", (int)ce); Log(msg);
 			}
+		}
+
+		if (outCreated) *outCreated += created;
+		GS::UniString dbg; dbg.Printf("[Distrib] path created=%u", (unsigned)created); Log(dbg);
+		return created > 0;
+	}
+
+	bool DistributeSelected(double stepMM, int count)
+	{
+		// режим
+		double useStepM = 0.0;
+		int    useCount = 0;
+		if (stepMM > 1e-9) { g_stepM = UiStepToMeters(stepMM); useStepM = g_stepM; useCount = 0; }
+		else if (count >= 1) { g_count = count; useStepM = 0.0; useCount = count; }
+		else { useStepM = g_stepM; useCount = g_count; }
+
+		{
+			GS::UniString dbg; dbg.Printf("[Distrib] use: %s, step(m)=%.6f, count=%d",
+				useStepM > 0.0 ? "STEP" : "COUNT", useStepM, useCount); Log(dbg);
+		}
+
+		// автоподхваты
+		if (!AutoGrabPathsIfNeeded()) { LogA("[Distrib] ERR no-paths");  return false; }
+		if (!AutoGrabProtoIfNeeded()) { LogA("[Distrib] ERR no-proto");  return false; }
+		if (useStepM <= 0.0 && useCount < 1) { LogA("[Distrib] ERR invalid-params"); return false; }
+
+		// прототип
+		API_Element proto = {}; proto.header.guid = g_protoGuid;
+		if (ACAPI_Element_Get(&proto) != NoError) { LogA("[Distrib] ERR proto-get"); return false; }
+		const API_ElemTypeID tid = proto.header.type.typeID;
+		if (tid != API_ObjectID && tid != API_LampID && tid != API_ColumnID) { LogA("[Distrib] ERR proto-type"); return false; }
+
+		// Undo + общий мемо
+		GSErrCode err = ACAPI_CallUndoableCommand("Distribute Along Multiple Paths", [&]() -> GSErrCode {
+			API_ElementMemo memo = {}; bool hasMemo = false;
+			if (tid == API_ObjectID || tid == API_LampID) {
+				if (ACAPI_Element_GetMemo(proto.header.guid, &memo) == NoError) hasMemo = true;
+			}
+
+			UInt32 totalCreated = 0;
+
+			for (const API_Guid& pg : g_pathGuids) {
+				std::vector<Seg> segs; double totalLen = 0.0;
+				if (!BuildPathSegments(pg, segs, &totalLen) || totalLen < 1e-6) {
+					LogA("[Distrib] skip: empty/invalid path");
+					continue;
+				}
+				(void)DistributeOnSinglePath(proto, tid, segs, totalLen, useStepM, useCount,
+					hasMemo ? &memo : nullptr, &totalCreated);
+			}
+
 			if (hasMemo) ACAPI_DisposeElemMemoHdls(&memo);
-			LogA("[Distrib] DONE");
-			{ GS::UniString fin; fin.Printf("[Distrib] created=%u", (unsigned)created); Log(fin); }
+
+			GS::UniString fin; fin.Printf("[Distrib] DONE, total created=%u", (unsigned)totalCreated);
+			Log(fin);
 			return NoError;
 			});
+
 		return err == NoError;
 	}
 

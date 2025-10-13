@@ -5,124 +5,67 @@
   <meta charset="UTF-8">
 
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      background-color: #f5f5f5;
-      margin: 20px;
-    }
-
-    table.selection-table {
-      border-collapse: collapse;
-      margin: 0 auto 20px auto;
-      width: 80%;
-      max-width: 800px;
-      background-color: #fff;
-    }
-    table.selection-table th, table.selection-table td {
-      border: 1px solid #888;
-      padding: 6px 10px;
-      text-align: center;
-    }
-    table.selection-table thead {
-      background-color: #f0f0f0;
-      font-weight: bold;
-    }
-
-    .tabs {
-      text-align: center;
-      margin-bottom: 10px;
-    }
-    .tablink {
-      display: inline-block;
-      padding: 8px 16px;
-      margin: 0 4px;
-      border: none;
-      border-radius: 4px 4px 0 0;
-      background: #ddd;
-      cursor: pointer;
-      font-size: 14px;
-    }
-    .tablink.active {
-      background: #0078d7;
-      color: #fff;
-    }
-    .tabcontent {
-      display: none;
-    }
-
-    fieldset.control-block {
-      display: block;
-      margin: 15px auto;
-      padding: 15px;
-      width: 400px;
-      max-width: 95%;
-      border: 1px solid #aaa;
-      border-radius: 6px;
-      background-color: #fff;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    }
-    fieldset.control-block legend {
-      font-weight: bold;
-    }
-    fieldset.control-block label {
-      display: inline-block;
-      width: 140px;
-      text-align: right;
-      margin-right: 8px;
-    }
-    fieldset.control-block input[type="number"] {
-      width: 120px;
-      padding: 3px;
-      margin: 3px 0;
-    }
-    fieldset.control-block input[type="button"] {
-      margin: 4px 0;
-      padding: 4px 10px;
-      cursor: pointer;
-    }
-
-    .info-box {
-      margin-top: 10px;
-      padding: 6px;
-      background-color: #f9f9f9;
-      border: 1px dashed #aaa;
-      font-size: 12px;
-      min-height: 30px;
-      white-space: pre-wrap;
-    }
-
-    a {
-      display: block;
-      text-align: center;
-      margin-top: 20px;
-    }
+    body { font-family: Arial, sans-serif; background-color: #f5f5f5; margin: 20px; }
+    table.selection-table { border-collapse: collapse; margin: 0 auto 20px auto; width: 80%; max-width: 800px; background-color: #fff; }
+    table.selection-table th, table.selection-table td { border: 1px solid #888; padding: 6px 10px; text-align: center; }
+    table.selection-table thead { background-color: #f0f0f0; font-weight: bold; }
+    .tabs { text-align: center; margin-bottom: 10px; }
+    .tablink { display: inline-block; padding: 8px 16px; margin: 0 4px; border: none; border-radius: 4px 4px 0 0; background: #ddd; cursor: pointer; font-size: 14px; }
+    .tablink.active { background: #0078d7; color: #fff; }
+    .tabcontent { display: none; }
+    fieldset.control-block { display: block; margin: 15px auto; padding: 15px; width: 400px; max-width: 95%; border: 1px solid #aaa; border-radius: 6px; background-color: #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    fieldset.control-block legend { font-weight: bold; }
+    fieldset.control-block label { display: inline-block; width: 140px; text-align: right; margin-right: 8px; }
+    fieldset.control-block input[type="number"] { width: 120px; padding: 3px; margin: 3px 0; }
+    fieldset.control-block input[type="button"] { margin: 4px 0; padding: 4px 10px; cursor: pointer; }
+    .info-box { margin-top: 10px; padding: 6px; background-color: #f9f9f9; border: 1px dashed #aaa; font-size: 12px; min-height: 30px; white-space: pre-wrap; }
+    a { display: block; text-align: center; margin-top: 20px; }
   </style>
 
   <script type="text/javascript">
-    // обновление таблицы выделения
+    // ---------- helpers ----------
+    function AddLog(msg) {
+      const box = document.getElementById('log-box');
+      const now = new Date().toLocaleTimeString();
+      box.innerText += "\n[" + now + "] " + msg;
+      box.scrollTop = box.scrollHeight;
+    }
+    function setInfo(id, msg) { document.getElementById(id).innerText = msg; }
+    function parseNumber(inputEl, defaultVal = 0) {
+      // пытаемся взять valueAsNumber; если NaN — парсим строку с заменой запятой
+      let v = (typeof inputEl.valueAsNumber === 'number' && !isNaN(inputEl.valueAsNumber)) ? inputEl.valueAsNumber : NaN;
+      if (isNaN(v)) {
+        const raw = String(inputEl.value || "").replace(',', '.');
+        const p = parseFloat(raw);
+        v = (Number.isFinite(p) ? p : defaultVal);
+      }
+      return v;
+    }
+
+    // ---------- таблица выделения ----------
     function UpdateSelectedElements () {
       ACAPI.GetSelectedElements().then(function (elemInfos) {
-        var selectionTable = document.getElementById('selection');
+        const selectionTable = document.getElementById('selection');
         while (selectionTable.firstChild) selectionTable.removeChild(selectionTable.firstChild);
 
         if (elemInfos.length === 0) {
-          var tr = document.createElement('tr');
+          const tr = document.createElement('tr');
           tr.innerHTML = '<td colspan="3">Нет выбранных элементов</td>';
           selectionTable.appendChild(tr);
           return;
         }
 
-        var grouped = {};
-        for (var i = 0; i < elemInfos.length; i++) {
-          var typeName = elemInfos[i][1];
-          var elemID   = elemInfos[i][2];
-          var key = typeName + "||" + elemID;
+        const grouped = {};
+        for (let i = 0; i < elemInfos.length; i++) {
+          const typeName = elemInfos[i][1];
+          const elemID   = elemInfos[i][2];
+          const key = typeName + "||" + elemID;
           if (!grouped[key]) grouped[key] = { type: typeName, id: elemID, count: 0 };
           grouped[key].count++;
         }
 
-        for (var key in grouped) {
-          var tr = document.createElement('tr');
+        for (const key in grouped) {
+          const tr = document.createElement('tr');
           tr.innerHTML =
             '<td>'+grouped[key].type+'</td>'+
             '<td>'+grouped[key].id+'</td>'+
@@ -132,159 +75,142 @@
       });
     }
 
-    function setInfo(id, msg) {
-      document.getElementById(id).innerText = msg;
+    // ---------- Ориентация ----------
+    function RotateSelection() {
+      const s = document.getElementById('rotateAngle').value;
+      ACAPI.RotateSelected(s);
+      setInfo("info-orient", "Повернули на " + s + "°");
+    }
+    function AlignSelectionX() { ACAPI.AlignSelectedX(); setInfo("info-orient", "Выравнивание по X"); }
+    function RandomizeAngles() { ACAPI.RandomizeSelectedAngles(); setInfo("info-orient", "Случайный угол задан"); }
+    function OrientObjectsToPoint() { ACAPI.OrientObjectsToPoint(); setInfo("info-orient", "Сориентированы на точку"); }
+
+    // ---------- Распределение ----------
+    function SetDistributionLine(){ ACAPI.SetDistributionLine(); setInfo("info-dist","Линия задана"); }
+    function SetDistributionObject(){ ACAPI.SetDistributionObject(); setInfo("info-dist","Объект задан"); }
+
+    function SetDistributionStep () {
+      const s = parseNumber(document.getElementById('distStep'), 0);
+      const step = (isFinite(s) && s > 0) ? s : 0;
+      ACAPI.SetDistributionStep(step);
+      if (step > 0) {
+        const payload = "step:" + step;
+        AddLog("[UI] Step OK → " + payload);
+        ACAPI.DistributeNow(payload).then(ok => {
+          setInfo("info-dist", ok ? "✔ Разложено по шагу" : "❌ Ошибка раскладки");
+        });
+      } else setInfo("info-dist", "Шаг должен быть > 0");
     }
 
-    // функции
-    function RotateSelection() {
-  var s = document.getElementById('rotateAngle').value;
-  ACAPI.RotateSelected(s);
-  setInfo("info-orient", "Повернули на " + s + "°");
-}
-function AlignSelectionX() {
-  ACAPI.AlignSelectedX();
-  setInfo("info-orient", "Выравнивание по X");
-}
-function RandomizeAngles() {
-  ACAPI.RandomizeSelectedAngles();
-  setInfo("info-orient", "Случайный угол задан");
-}
-function OrientObjectsToPoint() {
-  ACAPI.OrientObjectsToPoint();
-  setInfo("info-orient", "Сориентированы на точку");
-}
+    function SetDistributionCount () {
+      const c = parseInt((document.getElementById('distCount').value || "0"), 10);
+      const count = (isFinite(c) && c > 0) ? c : 0;
+      ACAPI.SetDistributionCount(count);
+      if (count > 0) {
+        const payload = "count:" + count;
+        AddLog("[UI] Count OK → " + payload);
+        ACAPI.DistributeNow(payload).then(ok => {
+          setInfo("info-dist", ok ? "✔ Разложено по количеству" : "❌ Ошибка раскладки");
+        });
+      } else setInfo("info-dist", "Количество должно быть ≥ 1");
+    }
 
-function AddLog(msg) {
-  var box = document.getElementById('log-box');
-  var now = new Date().toLocaleTimeString();
-  box.innerText += "\n[" + now + "] " + msg;
-  box.scrollTop = box.scrollHeight;
-}
-
-
-    function SetDistributionLine(){ACAPI.SetDistributionLine();setInfo("info-dist","Линия задана");}
-    function SetDistributionObject(){ACAPI.SetDistributionObject();setInfo("info-dist","Объект задан");}
-    function SetDistributionStep () {
-  const raw = (document.getElementById('distStep').value || "0").toString().replace(',', '.');
-  const s = parseFloat(raw);
-  const step = (isFinite(s) && s > 0) ? s : 0;
-
-  ACAPI.SetDistributionStep(step);
-  if (step > 0) {
-    const payload = "step:" + step;
-    AddLog("[UI] Step OK → " + payload);
-    ACAPI.DistributeNow(payload).then(ok => {
-      setInfo("info-dist", ok ? "✔ Разложено по шагу" : "❌ Ошибка раскладки");
+    // Enter в инпутах «Распределение»
+    document.addEventListener('DOMContentLoaded', () => {
+      const step = document.getElementById('distStep');
+      const cnt  = document.getElementById('distCount');
+      step.addEventListener('keydown', e => { if (e.key === 'Enter') SetDistributionStep(); });
+      cnt.addEventListener('keydown',  e => { if (e.key === 'Enter') SetDistributionCount(); });
     });
-  } else {
-    setInfo("info-dist", "Шаг должен быть > 0");
+
+    // ---------- Приземление ----------
+    function SetGroundSurface(){ ACAPI.SetGroundSurface(); setInfo("info-ground","Поверхность выбрана"); }
+    function SetGroundObjects(){ ACAPI.SetGroundObjects(); setInfo("info-ground","Объекты выбраны"); }
+
+    // Старый прямой вызов (оставлен на всякий случай; ожидает МЕТРЫ)
+    function ApplyGroundOffset(){
+      const zRaw = parseNumber(document.getElementById('groundOffset'), 0);
+      ACAPI.ApplyGroundOffset(zRaw).then(ok => {
+        setInfo("info-ground", ok ? ("Приземление Z=" + zRaw) : "Ошибка приземления");
+      });
+    }
+	function parseNumber(inputEl, defaultVal = 0) {
+  let v = (typeof inputEl.valueAsNumber === 'number' && !isNaN(inputEl.valueAsNumber)) ? inputEl.valueAsNumber : NaN;
+  if (isNaN(v)) {
+    const raw = String(inputEl.value || "").replace(',', '.');
+    const p = parseFloat(raw);
+    v = (Number.isFinite(p) ? p : defaultVal);
   }
+  return v;
 }
 
-function SetDistributionCount () {
-  const raw = (document.getElementById('distCount').value || "0").toString();
-  const c = parseInt(raw, 10);
-  const count = (isFinite(c) && c > 0) ? c : 0;
+    // Основная кнопка «Приземлить»: вводим в МИЛЛИМЕТРАХ → переводим в МЕТРЫ
+    function GroundLanding () {
+  const el = document.getElementById('groundOffset');
+  const zMm = parseNumber(el, 0);      // пользователь вводит мм
+  const zMeters = zMm / 1000.0;        // API ждёт метры
 
-  ACAPI.SetDistributionCount(count);
-  if (count > 0) {
-    const payload = "count:" + count;
-    AddLog("[UI] Count OK → " + payload);
-    ACAPI.DistributeNow(payload).then(ok => {
-      setInfo("info-dist", ok ? "✔ Разложено по количеству" : "❌ Ошибка раскладки");
-    });
-  } else {
-    setInfo("info-dist", "Количество должно быть ≥ 1");
-  }
-}
+  AddLog("[UI] GroundLanding z=" + zMm + " (мм) → " + zMeters + " (м)");
 
-// (по желанию) Enter в инпуте = нажать OK
-document.addEventListener('DOMContentLoaded', () => {
-  const step = document.getElementById('distStep');
-  const cnt  = document.getElementById('distCount');
-  step.addEventListener('keydown', e => { if (e.key === 'Enter') SetDistributionStep(); });
-  cnt.addEventListener('keydown',  e => { if (e.key === 'Enter') SetDistributionCount(); });
-});
-
-
-
-
-
-    function SetGroundSurface(){ACAPI.SetGroundSurface();setInfo("info-ground","Поверхность выбрана");}
-    function SetGroundObjects(){ACAPI.SetGroundObjects();setInfo("info-ground","Объекты выбраны");}
-    function ApplyGroundOffset(){var z=document.getElementById('groundOffset').value;ACAPI.ApplyGroundOffset(z);setInfo("info-ground","Приземление Z="+z);}
-	
-function GroundLanding() {
-  var el = document.getElementById('groundOffset');
-
-  // 1) сначала пробуем встроенный valueAsNumber
-  var z = (typeof el.valueAsNumber === 'number' && !isNaN(el.valueAsNumber))
-            ? el.valueAsNumber
-            : NaN;
-
-  // 2) если не вышло — парсим строку вручную (замена запятой на точку)
-  if (isNaN(z)) {
-    var raw = (el.value || "0").toString().replace(',', '.');
-    var parsed = parseFloat(raw);
-    z = isNaN(parsed) ? 0 : parsed;
-  }
-
-  AddLog("[UI] GroundLanding z=" + z);   // теперь увидишь реальное, что ушло в C++
-
-  ACAPI.SetGroundSurface().then(function (ok1) {
+  ACAPI.SetGroundSurface().then(ok1 => {
     AddLog(ok1 ? "[UI] Mesh detected" : "[UI] No Mesh in selection");
     if (!ok1) return;
 
-    ACAPI.SetGroundObjects().then(function (ok2) {
+    ACAPI.SetGroundObjects().then(ok2 => {
       AddLog(ok2 ? "[UI] Objects collected" : "[UI] No objects to land");
       if (!ok2) return;
 
-      ACAPI.ApplyGroundOffset(z).then(function (ok3) {
+      // ВАЖНО: отправляем именно число
+      ACAPI.ApplyGroundOffset(Number(zMeters)).then(ok3 => {
         AddLog(ok3 ? "[UI] Landing done" : "[UI] Landing failed");
       });
     });
   });
 }
 
-
-
+    // ---------- Построение ----------
     function CreateSlabAlongCurve(){
-  var raw = document.getElementById('slabWidth').value || "0";
-  var w = parseFloat(raw.toString().replace(',', '.')) || 0;
-  ACAPI.CreateSlabAlongCurve(w);
-  setInfo("info-build","Перекрытие, ширина="+ w);
-}
-    
-function CreateShellAlongCurve(){
-  var raw = document.getElementById('shellWidth').value || "0";
-  var w = parseFloat(raw.toString().replace(',', '.')) || 0;
-  ACAPI.CreateShellAlongCurve(w);
-  setInfo("info-build","Оболочка, ширина="+ w);
-}
+      const w = parseNumber(document.getElementById('slabWidth'), 0);
+      ACAPI.CreateSlabAlongCurve(w);
+      setInfo("info-build","Перекрытие, ширина=" + w);
+    }
+    function CreateShellAlongCurve(){
+      const w = parseNumber(document.getElementById('shellWidth'), 0);
+      ACAPI.CreateShellAlongCurve(w);
+      setInfo("info-build","Оболочка, ширина=" + w);
+    }
 
-function GenerateGDLFromSelection() {
-  ACAPI.GenerateGDLFromSelection().then(function (code) {
-    document.getElementById('gdlOutput').value = code || "Ничего не выделено или не поддерживается";
-  });
-}
+    // ---------- GDL ----------
+    function GenerateGDLFromSelection() {
+      ACAPI.GenerateGDLFromSelection().then(function (code) {
+        document.getElementById('gdlOutput').value = code || "Ничего не выделено или не поддерживается";
+      });
+    }
 
-    // вкладки
+    // ---------- вкладки ----------
     function openTab(evt, tabId) {
-      var i, contents=document.getElementsByClassName("tabcontent"), links=document.getElementsByClassName("tablink");
-      for(i=0;i<contents.length;i++) contents[i].style.display="none";
-      for(i=0;i<links.length;i++) links[i].classList.remove("active");
+      const contents = document.getElementsByClassName("tabcontent");
+      const links = document.getElementsByClassName("tablink");
+      for (let i = 0; i < contents.length; i++) contents[i].style.display="none";
+      for (let i = 0; i < links.length; i++) links[i].classList.remove("active");
       document.getElementById(tabId).style.display="block";
       evt.currentTarget.classList.add("active");
     }
-    window.addEventListener('DOMContentLoaded',function(){document.getElementById("defaultTab").click();});
+    window.addEventListener('DOMContentLoaded', function(){
+      document.getElementById("defaultTab").click();
+      UpdateSelectedElements();
+      AddLog("[UI] Ready");
+    });
   </script>
 </head>
 
 <body>
   <!-- Таблица выделения -->
   <table class="selection-table">
-    <thead><tr><th colspan="3">Выбранные элементы:</th></tr><tr><th>Тип</th><th>ID</th><th>Кол-во</th></tr></thead>
+    <thead>
+      <tr><th colspan="3">Выбранные элементы:</th></tr>
+      <tr><th>Тип</th><th>ID</th><th>Кол-во</th></tr>
+    </thead>
     <tbody id="selection"><tr><td colspan="3">Нет выбранных элементов</td></tr></tbody>
   </table>
 
@@ -294,7 +220,7 @@ function GenerateGDLFromSelection() {
     <button class="tablink" onclick="openTab(event,'tab-distrib')">Распределение</button>
     <button class="tablink" onclick="openTab(event,'tab-orient')">Ориентация</button>
     <button class="tablink" onclick="openTab(event,'tab-ground')">Приземление</button>
-	<button class="tablink" onclick="openTab(event,'tab-gdl')">GDL</button>
+    <button class="tablink" onclick="openTab(event,'tab-gdl')">GDL</button>
   </div>
 
   <!-- Построение -->
@@ -347,61 +273,59 @@ function GenerateGDLFromSelection() {
         <input type="number" id="distCount" step="1" value="1">
         <input type="button" onclick="SetDistributionCount()" value="OK">
       </div>
-      
       <div id="info-dist" class="info-box">Подсказка: задайте параметры</div>
     </fieldset>
   </div>
 
-<!-- Ориентация -->
-<div id="tab-orient" class="tabcontent">
-  <fieldset class="control-block">
-    <legend>Ориентация</legend>
-    <div>
-      <label>Угол:</label>
-      <input type="number" id="rotateAngle" step="1" value="0">
-      <input type="button" onclick="RotateSelection()" value="Повернуть">
-    </div>
-    <div style="text-align:center; margin-top:10px;">
-      <input type="button" onclick="AlignSelectionX()" value="Выровнять по X"><br><br>
-      <input type="button" onclick="RandomizeAngles()" value="Случайный угол (0-360)"><br><br>
-      <input type="button" onclick="OrientObjectsToPoint()" value="Сориентировать на точку">
-    </div>
-    <div id="info-orient" class="info-box">Подсказка: задайте угол или выберите действие</div>
-  </fieldset>
-</div>
+  <!-- Ориентация -->
+  <div id="tab-orient" class="tabcontent">
+    <fieldset class="control-block">
+      <legend>Ориентация</legend>
+      <div>
+        <label>Угол:</label>
+        <input type="number" id="rotateAngle" step="1" value="0">
+        <input type="button" onclick="RotateSelection()" value="Повернуть">
+      </div>
+      <div style="text-align:center; margin-top:10px;">
+        <input type="button" onclick="AlignSelectionX()" value="Выровнять по X"><br><br>
+        <input type="button" onclick="RandomizeAngles()" value="Случайный угол (0-360)"><br><br>
+        <input type="button" onclick="OrientObjectsToPoint()" value="Сориентировать на точку">
+      </div>
+      <div id="info-orient" class="info-box">Подсказка: задайте угол или выберите действие</div>
+    </fieldset>
+  </div>
 
-<!-- Приземление -->
-<div id="tab-ground" class="tabcontent">
-  <fieldset class="control-block">
-    <legend>Приземление</legend>
-    <div style="text-align:center; margin-bottom:10px;">
-      <label>Смещение Z:</label>
-      <input type="number" id="groundOffset" step="1" value="0">
-    </div>
-    <div style="text-align:center;">
-      <input type="button" onclick="GroundLanding()" value="Приземлить">
-    </div>
-    <div id="info-ground" class="info-box">
-      Подсказка: выделите Поверхость (3D Сетка + объекты ), задайте смещение и нажмите "Приземлить".
-    </div>
-  </fieldset>
-</div>
+  <!-- Приземление -->
+  <div id="tab-ground" class="tabcontent">
+    <fieldset class="control-block">
+      <legend>Приземление</legend>
+      <div style="text-align:center; margin-bottom:10px;">
+        <label>Смещение Z (мм):</label>
+        <input type="number" id="groundOffset" step="1" value="0">
+      </div>
+      <div style="text-align:center;">
+        <input type="button" onclick="GroundLanding()" value="Приземлить">
+      </div>
+      <div id="info-ground" class="info-box">
+        Подсказка: выделите Поверхность (3D-сетку) + объекты, задайте смещение в мм и нажмите «Приземлить».
+      </div>
+    </fieldset>
+  </div>
 
-<!-- GDL -->
-<div id="tab-gdl" class="tabcontent">
-  <fieldset class="control-block">
-    <legend>GDL-код из выделения</legend>
-    <div style="text-align:center;">
-      <input type="button" onclick="GenerateGDLFromSelection()" value="Создать GDL">
-    </div>
-    <textarea id="gdlOutput" style="width:95%;height:200px;margin-top:10px;font-family:monospace;"></textarea>
-  </fieldset>
-</div>
+  <!-- GDL -->
+  <div id="tab-gdl" class="tabcontent">
+    <fieldset class="control-block">
+      <legend>GDL-код из выделения</legend>
+      <div style="text-align:center;">
+        <input type="button" onclick="GenerateGDLFromSelection()" value="Создать GDL">
+      </div>
+      <textarea id="gdlOutput" style="width:95%;height:200px;margin-top:10px;font-family:monospace;"></textarea>
+    </fieldset>
+  </div>
 
-
-<div id="log-box" style="margin-top:10px; padding:8px; background:#111; color:#0f0; font-family:monospace; font-size:12px; height:100px; overflow:auto;">
-  [Лог плагина будет здесь]
-</div>
+  <div id="log-box" style="margin-top:10px; padding:8px; background:#111; color:#0f0; font-family:monospace; font-size:12px; height:100px; overflow:auto;">
+    [Лог плагина будет здесь]
+  </div>
 
   <a href="https://www.227.info">www.227.info</a>
 </body>

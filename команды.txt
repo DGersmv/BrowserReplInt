@@ -2,6 +2,8 @@ cmake -S . -B build -DAC_API_DEVKIT_DIR="D:/API Development Kit 27.6003" -DAC_AD
 cmake -S . -B build -DAC_API_DEVKIT_DIR="D:/API Development Kit 27.6003"
 cmake --build build --config Debug --target AddOnResources
 
+cmake -S . -B build -DAC_API_DEVKIT_DIR="C:\Program Files\Graphisoft\API Development Kit 27.6003"
+
 # если ругается на политику — разово на сеанс:
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
