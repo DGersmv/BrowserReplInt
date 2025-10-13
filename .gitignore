@@ -27,3 +27,8 @@ Makefile
 # OS
 Thumbs.db
 *.DS_Store
+# Archicad project files (do NOT track)
+*.pln
+*.bpn
+*.lck
+ToArchicad/versions/
