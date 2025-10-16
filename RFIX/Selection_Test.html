@@ -1,54 +1,61 @@
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
-<html>
+<html lang="ru">
 <head>
-  <title>Selection Test</title>
   <meta charset="UTF-8">
+  <title>Landscape REPL</title>
 
   <style>
-    body { font-family: Arial, sans-serif; background-color: #f5f5f5; margin: 20px; }
-    table.selection-table { border-collapse: collapse; margin: 0 auto 20px auto; width: 80%; max-width: 800px; background-color: #fff; }
-    table.selection-table th, table.selection-table td { border: 1px solid #888; padding: 6px 10px; text-align: center; }
-    table.selection-table thead { background-color: #f0f0f0; font-weight: bold; }
-    .tabs { text-align: center; margin-bottom: 10px; }
-    .tablink { display: inline-block; padding: 8px 16px; margin: 0 4px; border: none; border-radius: 4px 4px 0 0; background: #ddd; cursor: pointer; font-size: 14px; }
-    .tablink.active { background: #0078d7; color: #fff; }
-    .tabcontent { display: none; }
-    fieldset.control-block { display: block; margin: 15px auto; padding: 15px; width: 400px; max-width: 95%; border: 1px solid #aaa; border-radius: 6px; background-color: #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-    fieldset.control-block legend { font-weight: bold; }
-    fieldset.control-block label { display: inline-block; width: 140px; text-align: right; margin-right: 8px; }
-    fieldset.control-block input[type="number"] { width: 120px; padding: 3px; margin: 3px 0; }
-    fieldset.control-block input[type="button"] { margin: 4px 0; padding: 4px 10px; cursor: pointer; }
-    .info-box { margin-top: 10px; padding: 6px; background-color: #f9f9f9; border: 1px dashed #aaa; font-size: 12px; min-height: 30px; white-space: pre-wrap; }
-    a { display: block; text-align: center; margin-top: 20px; }
+    body { font-family: Arial, sans-serif; background:#f5f5f5; margin:20px; }
+    table.selection-table { border-collapse:collapse; margin:0 auto 20px; width:80%; max-width:800px; background:#fff; }
+    table.selection-table th, table.selection-table td { border:1px solid #888; padding:6px 10px; text-align:center; }
+    table.selection-table thead { background:#f0f0f0; font-weight:bold; }
+    .tabs { text-align:center; margin-bottom:10px; }
+    .tablink { display:inline-block; padding:8px 16px; margin:0 4px; border:0; border-radius:4px 4px 0 0; background:#ddd; cursor:pointer; font-size:14px; }
+    .tablink.active { background:#0078d7; color:#fff; }
+    .tabcontent { display:none; position:relative; }
+    fieldset.control-block { display:block; margin:15px auto; padding:15px; width:400px; max-width:95%; border:1px solid #aaa; border-radius:6px; background:#fff; box-shadow:0 2px 5px rgba(0,0,0,.1); }
+    fieldset.control-block legend { font-weight:bold; }
+    fieldset.control-block label { display:inline-block; width:140px; text-align:right; margin-right:8px; }
+    fieldset.control-block input[type="number"] { width:120px; padding:3px; margin:3px 0; }
+    fieldset.control-block input[type="button"] { margin:4px 0; padding:4px 10px; cursor:pointer; }
+    .info-box { margin-top:10px; padding:6px; background:#f9f9f9; border:1px dashed #aaa; font-size:12px; min-height:30px; white-space:pre-wrap; }
+    a { display:block; text-align:center; margin-top:20px; }
+    .tab-help { position:absolute; right:10px; bottom:10px; padding:8px 12px; border:0; border-radius:8px; background:#0078d7; color:#fff; font-weight:600; cursor:pointer; box-shadow:0 6px 18px rgba(0,0,0,.2); }
+    .tab-help:hover { filter:brightness(1.05); }
+    .tab-help:active { transform:translateY(1px); }
+    #log-box { margin-top:10px; padding:8px; background:#111; color:#0f0; font-family:monospace; font-size:12px; height:100px; overflow:auto; }
   </style>
 
   <script type="text/javascript">
     // ---------- helpers ----------
     function AddLog(msg) {
       const box = document.getElementById('log-box');
+      if (!box) return;
       const now = new Date().toLocaleTimeString();
       box.innerText += "\n[" + now + "] " + msg;
       box.scrollTop = box.scrollHeight;
     }
-    function setInfo(id, msg) { document.getElementById(id).innerText = msg; }
-    function parseNumber(inputEl, defaultVal = 0) {
-      // пытаемся взять valueAsNumber; если NaN — парсим строку с заменой запятой
+    function setInfo(id, msg) { const el = document.getElementById(id); if (el) el.innerText = msg; }
+    function parseNumber(inputEl, def = 0) {
       let v = (typeof inputEl.valueAsNumber === 'number' && !isNaN(inputEl.valueAsNumber)) ? inputEl.valueAsNumber : NaN;
       if (isNaN(v)) {
-        const raw = String(inputEl.value || "").replace(',', '.');
-        const p = parseFloat(raw);
-        v = (Number.isFinite(p) ? p : defaultVal);
+        const p = parseFloat(String(inputEl.value || "").replace(',', '.'));
+        v = Number.isFinite(p) ? p : def;
       }
       return v;
     }
 
     // ---------- таблица выделения ----------
-    function UpdateSelectedElements () {
+    function UpdateSelectedElements() {
+      if (!window.ACAPI || typeof ACAPI.GetSelectedElements !== 'function') {
+        AddLog('[UI] ACAPI.GetSelectedElements недоступен');
+        return;
+      }
       ACAPI.GetSelectedElements().then(function (elemInfos) {
         const selectionTable = document.getElementById('selection');
         while (selectionTable.firstChild) selectionTable.removeChild(selectionTable.firstChild);
 
-        if (elemInfos.length === 0) {
+        if (!elemInfos || elemInfos.length === 0) {
           const tr = document.createElement('tr');
           tr.innerHTML = '<td colspan="3">Нет выбранных элементов</td>';
           selectionTable.appendChild(tr);
@@ -64,142 +71,113 @@
           grouped[key].count++;
         }
 
-        for (const key in grouped) {
+        Object.keys(grouped).forEach(key => {
           const tr = document.createElement('tr');
-          tr.innerHTML =
-            '<td>'+grouped[key].type+'</td>'+
-            '<td>'+grouped[key].id+'</td>'+
-            '<td>'+grouped[key].count+'</td>';
+          tr.innerHTML = '<td>'+grouped[key].type+'</td><td>'+grouped[key].id+'</td><td>'+grouped[key].count+'</td>';
           selectionTable.appendChild(tr);
-        }
-      });
+        });
+      }).catch(err => AddLog('[UI] GetSelectedElements error: ' + err));
     }
 
-    // ---------- Ориентация ----------
+    // ---------- действия ----------
     function RotateSelection() {
       const s = document.getElementById('rotateAngle').value;
-      ACAPI.RotateSelected(s);
+      if (window.ACAPI && typeof ACAPI.RotateSelected === 'function') ACAPI.RotateSelected(s);
       setInfo("info-orient", "Повернули на " + s + "°");
     }
-    function AlignSelectionX() { ACAPI.AlignSelectedX(); setInfo("info-orient", "Выравнивание по X"); }
-    function RandomizeAngles() { ACAPI.RandomizeSelectedAngles(); setInfo("info-orient", "Случайный угол задан"); }
-    function OrientObjectsToPoint() { ACAPI.OrientObjectsToPoint(); setInfo("info-orient", "Сориентированы на точку"); }
+    function AlignSelectionX() { if (ACAPI?.AlignSelectedX) ACAPI.AlignSelectedX(); setInfo("info-orient", "Выравнивание по X"); }
+    function RandomizeAngles() { if (ACAPI?.RandomizeSelectedAngles) ACAPI.RandomizeSelectedAngles(); setInfo("info-orient", "Случайный угол задан"); }
+    function OrientObjectsToPoint() { if (ACAPI?.OrientObjectsToPoint) ACAPI.OrientObjectsToPoint(); setInfo("info-orient", "Сориентированы на точку"); }
 
-    // ---------- Распределение ----------
-    function SetDistributionLine(){ ACAPI.SetDistributionLine(); setInfo("info-dist","Линия задана"); }
-    function SetDistributionObject(){ ACAPI.SetDistributionObject(); setInfo("info-dist","Объект задан"); }
+    function SetDistributionLine(){ ACAPI?.SetDistributionLine && ACAPI.SetDistributionLine(); setInfo("info-dist","Линия задана"); }
+    function SetDistributionObject(){ ACAPI?.SetDistributionObject && ACAPI.SetDistributionObject(); setInfo("info-dist","Объект задан"); }
 
     function SetDistributionStep () {
       const s = parseNumber(document.getElementById('distStep'), 0);
       const step = (isFinite(s) && s > 0) ? s : 0;
-      ACAPI.SetDistributionStep(step);
+      ACAPI?.SetDistributionStep && ACAPI.SetDistributionStep(step);
       if (step > 0) {
         const payload = "step:" + step;
         AddLog("[UI] Step OK → " + payload);
-        ACAPI.DistributeNow(payload).then(ok => {
-          setInfo("info-dist", ok ? "✔ Разложено по шагу" : "❌ Ошибка раскладки");
-        });
+        if (ACAPI?.DistributeNow) {
+          ACAPI.DistributeNow(payload).then(ok => setInfo("info-dist", ok ? "✔ Разложено по шагу" : "❌ Ошибка раскладки"));
+        }
       } else setInfo("info-dist", "Шаг должен быть > 0");
     }
 
     function SetDistributionCount () {
       const c = parseInt((document.getElementById('distCount').value || "0"), 10);
       const count = (isFinite(c) && c > 0) ? c : 0;
-      ACAPI.SetDistributionCount(count);
+      ACAPI?.SetDistributionCount && ACAPI.SetDistributionCount(count);
       if (count > 0) {
         const payload = "count:" + count;
         AddLog("[UI] Count OK → " + payload);
-        ACAPI.DistributeNow(payload).then(ok => {
-          setInfo("info-dist", ok ? "✔ Разложено по количеству" : "❌ Ошибка раскладки");
-        });
+        if (ACAPI?.DistributeNow) {
+          ACAPI.DistributeNow(payload).then(ok => setInfo("info-dist", ok ? "✔ Разложено по количеству" : "❌ Ошибка раскладки"));
+        }
       } else setInfo("info-dist", "Количество должно быть ≥ 1");
     }
 
-    // Enter в инпутах «Распределение»
-    document.addEventListener('DOMContentLoaded', () => {
-      const step = document.getElementById('distStep');
-      const cnt  = document.getElementById('distCount');
-      step.addEventListener('keydown', e => { if (e.key === 'Enter') SetDistributionStep(); });
-      cnt.addEventListener('keydown',  e => { if (e.key === 'Enter') SetDistributionCount(); });
-    });
-
-    // ---------- Приземление ----------
-    function SetGroundSurface(){ ACAPI.SetGroundSurface(); setInfo("info-ground","Поверхность выбрана"); }
-    function SetGroundObjects(){ ACAPI.SetGroundObjects(); setInfo("info-ground","Объекты выбраны"); }
-
-    // Старый прямой вызов (оставлен на всякий случай; ожидает МЕТРЫ)
-    function ApplyGroundOffset(){
-      const zRaw = parseNumber(document.getElementById('groundOffset'), 0);
-      ACAPI.ApplyGroundOffset(zRaw).then(ok => {
-        setInfo("info-ground", ok ? ("Приземление Z=" + zRaw) : "Ошибка приземления");
-      });
-    }
-	function parseNumber(inputEl, defaultVal = 0) {
-  let v = (typeof inputEl.valueAsNumber === 'number' && !isNaN(inputEl.valueAsNumber)) ? inputEl.valueAsNumber : NaN;
-  if (isNaN(v)) {
-    const raw = String(inputEl.value || "").replace(',', '.');
-    const p = parseFloat(raw);
-    v = (Number.isFinite(p) ? p : defaultVal);
-  }
-  return v;
-}
-
-    // Основная кнопка «Приземлить»: вводим в МИЛЛИМЕТРАХ → переводим в МЕТРЫ
-    function GroundLanding () {
-  const el = document.getElementById('groundOffset');
-  const zMm = parseNumber(el, 0);      // пользователь вводит мм
-  const zMeters = zMm / 1000.0;        // API ждёт метры
-
-  AddLog("[UI] GroundLanding z=" + zMm + " (мм) → " + zMeters + " (м)");
-
-  ACAPI.SetGroundSurface().then(ok1 => {
-    AddLog(ok1 ? "[UI] Mesh detected" : "[UI] No Mesh in selection");
-    if (!ok1) return;
-
-    ACAPI.SetGroundObjects().then(ok2 => {
-      AddLog(ok2 ? "[UI] Objects collected" : "[UI] No objects to land");
-      if (!ok2) return;
-
-      // ВАЖНО: отправляем именно число
-      ACAPI.ApplyGroundOffset(Number(zMeters)).then(ok3 => {
-        AddLog(ok3 ? "[UI] Landing done" : "[UI] Landing failed");
-      });
-    });
-  });
-}
-
-    // ---------- Построение ----------
     function CreateSlabAlongCurve(){
       const w = parseNumber(document.getElementById('slabWidth'), 0);
-      ACAPI.CreateSlabAlongCurve(w);
+      ACAPI?.CreateSlabAlongCurve && ACAPI.CreateSlabAlongCurve(w);
       setInfo("info-build","Перекрытие, ширина=" + w);
     }
     function CreateShellAlongCurve(){
       const w = parseNumber(document.getElementById('shellWidth'), 0);
-      ACAPI.CreateShellAlongCurve(w);
+      ACAPI?.CreateShellAlongCurve && ACAPI.CreateShellAlongCurve(w);
       setInfo("info-build","Оболочка, ширина=" + w);
     }
 
-    // ---------- GDL ----------
     function GenerateGDLFromSelection() {
-      ACAPI.GenerateGDLFromSelection().then(function (code) {
+      if (!ACAPI?.GenerateGDLFromSelection) { AddLog('[UI] ACAPI.GenerateGDLFromSelection недоступен'); return; }
+      ACAPI.GenerateGDLFromSelection().then(code => {
         document.getElementById('gdlOutput').value = code || "Ничего не выделено или не поддерживается";
       });
     }
 
-    // ---------- вкладки ----------
+    // ---------- вкладки (глобально!) ----------
     function openTab(evt, tabId) {
       const contents = document.getElementsByClassName("tabcontent");
       const links = document.getElementsByClassName("tablink");
-      for (let i = 0; i < contents.length; i++) contents[i].style.display="none";
+      for (let i = 0; i < contents.length; i++) contents[i].style.display = "none";
       for (let i = 0; i < links.length; i++) links[i].classList.remove("active");
-      document.getElementById(tabId).style.display="block";
+      document.getElementById(tabId).style.display = "block";
       evt.currentTarget.classList.add("active");
     }
-    window.addEventListener('DOMContentLoaded', function(){
-      document.getElementById("defaultTab").click();
-      UpdateSelectedElements();
+    window.openTab = openTab; // чтобы было доступно из onclick
+
+    // ---------- init + делегатор помощи ----------
+    window.addEventListener('DOMContentLoaded', function () {
       AddLog("[UI] Ready");
+
+      // Enter-нажатия для числовых полей
+      const step = document.getElementById('distStep');
+      const cnt  = document.getElementById('distCount');
+      step?.addEventListener('keydown', e => { if (e.key === 'Enter') SetDistributionStep(); });
+      cnt ?.addEventListener('keydown',  e => { if (e.key === 'Enter') SetDistributionCount(); });
+
+      // Делегирование кликов по любым элементам с data-help-url
+      document.addEventListener('click', function (e) {
+        const el = e.target.closest('[data-help-url]');
+        if (!el) return;
+
+        e.preventDefault();
+        const url = el.getAttribute('data-help-url') || 'https://landscape.227.info/help/start';
+        AddLog('[UI] help → ' + url);
+
+        if (window.ACAPI && typeof ACAPI.OpenHelp === 'function') {
+          Promise.resolve(ACAPI.OpenHelp(url))
+            .then(() => AddLog('[UI] ACAPI.OpenHelp ok'))
+            .catch(err => AddLog('[UI] ACAPI.OpenHelp error: ' + err));
+        } else {
+          AddLog('[UI] ACAPI.OpenHelp не найден → window.open');
+          window.open(url, '_blank', 'noopener,noreferrer');
+        }
+      });
+
+      UpdateSelectedElements();
+      document.getElementById("defaultTab").click();
     });
   </script>
 </head>
@@ -228,7 +206,7 @@
     <fieldset class="control-block">
       <legend>Перекрытие по линии</legend>
       <div style="text-align:center; margin-bottom:6px;">
-        <input type="button" onclick="ACAPI.SetCurveForSlab()" value="Выбрать линию">
+        <input type="button" onclick="ACAPI.SetCurveForSlab && ACAPI.SetCurveForSlab()" value="Выбрать линию">
       </div>
       <div>
         <label>Ширина:</label>
@@ -240,8 +218,8 @@
     <fieldset class="control-block">
       <legend>Оболочка по линии</legend>
       <div style="text-align:center; margin-bottom:6px;">
-        <input type="button" onclick="ACAPI.SetCurveForShell()" value="Выбрать линию"><br><br>
-        <input type="button" onclick="ACAPI.SetMeshForShell()" value="Выбрать 3D сетку">
+        <input type="button" onclick="ACAPI.SetCurveForShell && ACAPI.SetCurveForShell()" value="Выбрать линию"><br><br>
+        <input type="button" onclick="ACAPI.SetMeshForShell && ACAPI.SetMeshForShell()" value="Выбрать 3D сетку">
       </div>
       <div>
         <label>Ширина:</label>
@@ -253,6 +231,10 @@
       </div>
       <div id="info-build" class="info-box">Подсказка: выберите линию/сетку и задайте параметры</div>
     </fieldset>
+
+    <button class="tab-help"
+            data-help-url="https://landscape.227.info/help/distribution?embed=1"
+            data-help-title="Справка: Построение">Помощь</button>
   </div>
 
   <!-- Распределение -->
@@ -275,6 +257,10 @@
       </div>
       <div id="info-dist" class="info-box">Подсказка: задайте параметры</div>
     </fieldset>
+
+    <button class="tab-help"
+            data-help-url="https://landscape.227.info/help/distribution?embed=1"
+            data-help-title="Справка: Распределение">Помощь</button>
   </div>
 
   <!-- Ориентация -->
@@ -293,6 +279,10 @@
       </div>
       <div id="info-orient" class="info-box">Подсказка: задайте угол или выберите действие</div>
     </fieldset>
+
+    <button class="tab-help"
+            data-help-url="https://landscape.227.info/help/orientation?embed=1"
+            data-help-title="Справка: Ориентация">Помощь</button>
   </div>
 
   <!-- Приземление -->
@@ -310,6 +300,10 @@
         Подсказка: выделите Поверхность (3D-сетку) + объекты, задайте смещение в мм и нажмите «Приземлить».
       </div>
     </fieldset>
+
+    <button class="tab-help"
+            data-help-url="https://landscape.227.info/help/ground?embed=1"
+            data-help-title="Справка: Приземление">Помощь</button>
   </div>
 
   <!-- GDL -->
@@ -321,12 +315,18 @@
       </div>
       <textarea id="gdlOutput" style="width:95%;height:200px;margin-top:10px;font-family:monospace;"></textarea>
     </fieldset>
+
+    <button class="tab-help"
+            data-help-url="https://landscape.227.info/help/gdl?embed=1"
+            data-help-title="Справка: GDL">Помощь</button>
   </div>
 
-  <div id="log-box" style="margin-top:10px; padding:8px; background:#111; color:#0f0; font-family:monospace; font-size:12px; height:100px; overflow:auto;">
-    [Лог плагина будет здесь]
-  </div>
+  <div id="log-box">[Лог плагина будет здесь]</div>
 
-  <a href="https://www.227.info">www.227.info</a>
+  <a href="#"
+     data-help-url="https://landscape.227.info/?embed=1"
+     data-help-title="LandscapeHelper — сайт">
+    landscape.227.info
+  </a>
 </body>
 </html>

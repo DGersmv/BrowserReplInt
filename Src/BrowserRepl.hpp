@@ -8,6 +8,7 @@
 #include "DGDefs.h"
 #include "DGBrowser.hpp"
 
+
 // Класс BrowserRepl управляет палитрой и встроенным браузером
 class BrowserRepl : public DG::Palette, public DG::PanelObserver {
 public:

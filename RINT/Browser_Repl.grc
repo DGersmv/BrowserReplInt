@@ -3,8 +3,8 @@
 // ****************************************************************************/
 
 'STR#' 32000 "Add-on Name and Description" {
-/* [  1] */		"Browser Replication"
-/* [  2] */		"Browser Repl Ver1"
+/* [  1] */		"Landscape Helper AC27"
+/* [  2] */		"Landscape AC27 V1.4"
 }
 
 'STR#' 32501 "Strings for the Menu" {
@@ -22,4 +22,14 @@
 
 'DLGH'  32500  DLG_32500_Browser_Repl {
 1	"Browser Control"		Browser_0
+}
+
+/* --- Dockable browser palette: HELP ---------------------------------------*/
+
+'GDLG'  32510    Palette | topCaption | close | grow   0   0  900  700  "Справка LandscapeHelper"  {
+/* [  1] */ Browser         0   0  900  700
+}
+
+'DLGH'  32510  DLG_32510_Help_Browser {
+1   "Help Browser Control"     Browser_0
 }

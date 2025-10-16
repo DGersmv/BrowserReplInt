@@ -11,6 +11,7 @@
 #include	"APIEnvir.h"
 #include	"ACAPinc.h"		// also includes APIdefs.h
 #include	"BrowserRepl.hpp"
+#include    "HelpPalette.hpp"  
 
 // -----------------------------------------------------------------------------
 // Show or Hide Browser Palette
@@ -86,22 +87,28 @@ GSErrCode	__ACDLL_CALL	RegisterInterface (void)
 //		called after the Add-On has been loaded into memory
 // -----------------------------------------------------------------------------
 
-GSErrCode __ACENV_CALL	Initialize (void)
+GSErrCode __ACENV_CALL Initialize ()
 {
-	GSErrCode err = ACAPI_MenuItem_InstallMenuHandler (BrowserReplMenuResId, MenuCommandHandler);
-	if (DBERROR (err != NoError))
-		return err;
+    // 1) Меню
+    GSErrCode err = ACAPI_MenuItem_InstallMenuHandler (BrowserReplMenuResId, MenuCommandHandler);
+    if (DBERROR (err != NoError))
+        return err;
 
-	err = ACAPI_Notification_CatchSelectionChange (BrowserRepl::SelectionChangeHandler);
-	if (DBERROR (err != NoError))
-		return err;
+    // 2) Нотификация выбора
+    err = ACAPI_Notification_CatchSelectionChange (BrowserRepl::SelectionChangeHandler);
+    if (DBERROR (err != NoError))
+        return err;
 
-	err = BrowserRepl::RegisterPaletteControlCallBack ();
-	if (DBERROR (err != NoError))
-		return err;
+    // 3) Регистрация модельных окон (палитр) — аккумулируем ошибки
+    GSErrCode palErr = NoError;
+    palErr |= BrowserRepl::RegisterPaletteControlCallBack ();
+    palErr |= HelpPalette::RegisterPaletteControlCallBack ();
 
-	return err;
-}		// Initialize
+    if (DBERROR (palErr != NoError))
+        return palErr;
+
+    return NoError;
+}	// Initialize
 
 
 // -----------------------------------------------------------------------------

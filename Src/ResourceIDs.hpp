@@ -6,4 +6,7 @@
 #define BrowserReplMenuResId    32501
 #define BrowserReplMenuItemIndex 1
 
+constexpr short HelpPaletteResId = 32510; // 'GDLG' новой палитры
+constexpr short HelpBrowserCtrlId = 1;     // ID Browser-контрола внутри неё
+
 #endif

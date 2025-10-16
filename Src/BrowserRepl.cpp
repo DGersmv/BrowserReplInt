@@ -5,6 +5,7 @@
 #include "GroundHelper.hpp"
 #include "BuildHelper.hpp"
 #include "GDLHelper.hpp"
+#include "HelpPalette.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -118,8 +119,9 @@ void BrowserRepl::Hide()
 
 void BrowserRepl::InitBrowserControl()
 {
-    browser.LoadHTML(LoadHtmlFromResource());
+    
     RegisterACAPIJavaScriptObject();
+    browser.LoadHTML(LoadHtmlFromResource());
     UpdateSelectedElementsOnHTML();
 }
 
@@ -175,6 +177,24 @@ void BrowserRepl::RegisterACAPIJavaScriptObject()
         }
         return new JS::Value(RotateHelper::RotateSelected(angle));
     }));
+	
+	// --- OpenHelp: открыть вторую палитру и загрузить URL ---
+    jsACAPI->AddItem(new JS::Function("OpenHelp", [](GS::Ref<JS::Base> param) {
+        GS::UniString url;
+        if (GS::Ref<JS::Value> v = GS::DynamicCast<JS::Value>(param)) {
+            if (v->GetType() == JS::Value::STRING)
+                url = v->GetString();
+        }
+        if (url.IsEmpty())
+            url = "https://landscape.227.info/help/start";
+
+        ACAPI_WriteReport("[OpenHelp] url=%s", false, url.ToCStr().Get());
+        if (BrowserRepl::HasInstance())
+            BrowserRepl::GetInstance().LogToBrowser("[C++] OpenHelp to " + url);
+
+        HelpPalette::ShowWithURL(url);
+        return new JS::Value(true);
+        }));
 
     jsACAPI->AddItem(new JS::Function("AlignSelectedX", [](GS::Ref<JS::Base>) {
         return new JS::Value(RotateHelper::AlignSelectedX());
@@ -448,13 +468,21 @@ GSErrCode __ACENV_CALL BrowserRepl::PaletteControlCallBack(Int32, API_PaletteMes
     return NoError;
 }
 
+
 GSErrCode BrowserRepl::RegisterPaletteControlCallBack()
 {
     return ACAPI_RegisterModelessWindow(
         GS::CalculateHashValue(paletteGuid),
         PaletteControlCallBack,
-        API_PalEnabled_FloorPlan + API_PalEnabled_Section + API_PalEnabled_Elevation +
-        API_PalEnabled_InteriorElevation + API_PalEnabled_3D + API_PalEnabled_Detail +
-        API_PalEnabled_Worksheet + API_PalEnabled_Layout + API_PalEnabled_DocumentFrom3D,
-        GSGuid2APIGuid(paletteGuid));
+        API_PalEnabled_FloorPlan |
+        API_PalEnabled_Section |
+        API_PalEnabled_Elevation |
+        API_PalEnabled_InteriorElevation |
+        API_PalEnabled_3D |
+        API_PalEnabled_Detail |
+        API_PalEnabled_Worksheet |
+        API_PalEnabled_Layout |
+        API_PalEnabled_DocumentFrom3D,
+        GSGuid2APIGuid(paletteGuid)
+    );
 }
