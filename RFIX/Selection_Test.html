@@ -1,4 +1,4 @@
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<!doctype html>
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
@@ -11,7 +11,7 @@
     table.selection-table thead { background:#f0f0f0; font-weight:bold; }
     .tabs { text-align:center; margin-bottom:10px; }
     .tablink { display:inline-block; padding:8px 16px; margin:0 4px; border:0; border-radius:4px 4px 0 0; background:#ddd; cursor:pointer; font-size:14px; }
-    .tablink.active { background:#0078d7; color:#fff; }
+    .tablink.active { background:#366536; color:#fff; }
     .tabcontent { display:none; position:relative; }
     fieldset.control-block { display:block; margin:15px auto; padding:15px; width:400px; max-width:95%; border:1px solid #aaa; border-radius:6px; background:#fff; box-shadow:0 2px 5px rgba(0,0,0,.1); }
     fieldset.control-block legend { font-weight:bold; }
@@ -20,22 +20,28 @@
     fieldset.control-block input[type="button"] { margin:4px 0; padding:4px 10px; cursor:pointer; }
     .info-box { margin-top:10px; padding:6px; background:#f9f9f9; border:1px dashed #aaa; font-size:12px; min-height:30px; white-space:pre-wrap; }
     a { display:block; text-align:center; margin-top:20px; }
-    .tab-help { position:absolute; right:10px; bottom:10px; padding:8px 12px; border:0; border-radius:8px; background:#0078d7; color:#fff; font-weight:600; cursor:pointer; box-shadow:0 6px 18px rgba(0,0,0,.2); }
+    .tab-help { position:absolute; right:10px; bottom:10px; padding:8px 12px; border:0; border-radius:8px; background:#366536; color:#fff; font-weight:600; cursor:pointer; box-shadow:0 6px 18px rgba(0,0,0,.2); }
     .tab-help:hover { filter:brightness(1.05); }
     .tab-help:active { transform:translateY(1px); }
-    #log-box { margin-top:10px; padding:8px; background:#111; color:#0f0; font-family:monospace; font-size:12px; height:100px; overflow:auto; }
+    #log-box { margin-top:10px; padding:8px; background:#111; color:#0f0; font-family:monospace; font-size:12px; height:140px; overflow:auto; }
+    .muted { opacity:.6; }
   </style>
 
   <script type="text/javascript">
-    // ---------- helpers ----------
+    "use strict";
+
+    // ================= helpers =================
     function AddLog(msg) {
       const box = document.getElementById('log-box');
       if (!box) return;
       const now = new Date().toLocaleTimeString();
-      box.innerText += "\n[" + now + "] " + msg;
+      box.textContent += "\n[" + now + "] " + msg;
       box.scrollTop = box.scrollHeight;
     }
-    function setInfo(id, msg) { const el = document.getElementById(id); if (el) el.innerText = msg; }
+    function setInfo(id, msg) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = msg;
+    }
     function parseNumber(inputEl, def = 0) {
       let v = (typeof inputEl.valueAsNumber === 'number' && !isNaN(inputEl.valueAsNumber)) ? inputEl.valueAsNumber : NaN;
       if (isNaN(v)) {
@@ -45,13 +51,56 @@
       return v;
     }
 
-    // ---------- таблица выделения ----------
+    // =============== ожидание моста ACAPI (с диагностикой) ===============
+    function whenACAPIReadyDo(cb) {
+      let fired = false;
+      const probe = () => {
+        const A = window.ACAPI;
+        if (!A) return null;
+        return {
+          hasSelect : typeof A.GetSelectedElements === 'function',
+          hasGround : typeof A.ApplyGroundOffset  === 'function',
+          hasNewDlt : typeof A.SetZDelta         === 'function' && typeof A.ApplyZDelta === 'function', // двухшаговый
+          hasOldDlt : typeof A.ApplyZDelta       === 'function' && A.ApplyZDelta.length >= 1            // одноступенчатый
+        };
+      };
+      const ready = () => {
+        const caps = probe();
+        return caps && (caps.hasSelect || caps.hasGround || caps.hasNewDlt || caps.hasOldDlt);
+      };
+      const fire = () => {
+        if (fired) return;
+        fired = true;
+        try {
+          const caps = probe();
+          AddLog(`[UI] ACAPI готов: select=${!!caps.hasSelect} ground=${!!caps.hasGround} newΔ=${!!caps.hasNewDlt} oldΔ=${!!caps.hasOldDlt}`);
+          cb();
+        } catch (e) { AddLog('[UI] callback error: ' + e); }
+      };
+
+      if (ready()) { fire(); return; }
+
+      let tries = 0;
+      const maxTries = 120; // ~6 сек
+      const iv = setInterval(() => {
+        if (ready()) {
+          clearInterval(iv);
+          fire();
+        } else if (++tries > maxTries) {
+          clearInterval(iv);
+          AddLog('[UI] ACAPI так и не появился (проверь загрузку палитры/плагина)');
+        }
+      }, 50);
+    }
+
+    // =============== таблица выделения ===============
     function UpdateSelectedElements() {
-      if (!window.ACAPI || typeof ACAPI.GetSelectedElements !== 'function') {
+      const A = window.ACAPI;
+      if (!A || typeof A.GetSelectedElements !== 'function') {
         AddLog('[UI] ACAPI.GetSelectedElements недоступен');
         return;
       }
-      ACAPI.GetSelectedElements().then(function (elemInfos) {
+      A.GetSelectedElements().then(function (elemInfos) {
         const selectionTable = document.getElementById('selection');
         while (selectionTable.firstChild) selectionTable.removeChild(selectionTable.firstChild);
 
@@ -59,6 +108,7 @@
           const tr = document.createElement('tr');
           tr.innerHTML = '<td colspan="3">Нет выбранных элементов</td>';
           selectionTable.appendChild(tr);
+          AddLog('[UI] Выделение пусто');
           return;
         }
 
@@ -70,65 +120,59 @@
           if (!grouped[key]) grouped[key] = { type: typeName, id: elemID, count: 0 };
           grouped[key].count++;
         }
-
         Object.keys(grouped).forEach(key => {
           const tr = document.createElement('tr');
-          tr.innerHTML = '<td>'+grouped[key].type+'</td><td>'+grouped[key].id+'</td><td>'+grouped[key].count+'</td>';
+          tr.innerHTML =
+            '<td>' + grouped[key].type + '</td>' +
+            '<td>' + grouped[key].id   + '</td>' +
+            '<td>' + grouped[key].count+ '</td>';
           selectionTable.appendChild(tr);
         });
+        AddLog('[UI] Выделено групп: ' + Object.keys(grouped).length + ', элементов: ' + elemInfos.length);
       }).catch(err => AddLog('[UI] GetSelectedElements error: ' + err));
     }
 
-    // ---------- действия ----------
+    // =============== ориентация/раскладка/построение ===============
     function RotateSelection() {
       const s = document.getElementById('rotateAngle').value;
       if (window.ACAPI && typeof ACAPI.RotateSelected === 'function') ACAPI.RotateSelected(s);
       setInfo("info-orient", "Повернули на " + s + "°");
     }
-    function AlignSelectionX() { if (ACAPI?.AlignSelectedX) ACAPI.AlignSelectedX(); setInfo("info-orient", "Выравнивание по X"); }
-    function RandomizeAngles() { if (ACAPI?.RandomizeSelectedAngles) ACAPI.RandomizeSelectedAngles(); setInfo("info-orient", "Случайный угол задан"); }
-    function OrientObjectsToPoint() { if (ACAPI?.OrientObjectsToPoint) ACAPI.OrientObjectsToPoint(); setInfo("info-orient", "Сориентированы на точку"); }
-
-    function SetDistributionLine(){ ACAPI?.SetDistributionLine && ACAPI.SetDistributionLine(); setInfo("info-dist","Линия задана"); }
-    function SetDistributionObject(){ ACAPI?.SetDistributionObject && ACAPI.SetDistributionObject(); setInfo("info-dist","Объект задан"); }
-
+    function AlignSelectionX()         { if (ACAPI?.AlignSelectedX)         ACAPI.AlignSelectedX();         setInfo("info-orient", "Выравнивание по X"); }
+    function RandomizeAngles()         { if (ACAPI?.RandomizeSelectedAngles) ACAPI.RandomizeSelectedAngles(); setInfo("info-orient", "Случайный угол задан"); }
+    function OrientObjectsToPoint()    { if (ACAPI?.OrientObjectsToPoint)    ACAPI.OrientObjectsToPoint();    setInfo("info-orient", "Сориентированы на точку"); }
+    function SetDistributionLine()     { if (ACAPI?.SetDistributionLine)     ACAPI.SetDistributionLine();     setInfo("info-dist","Линия задана"); }
+    function SetDistributionObject()   { if (ACAPI?.SetDistributionObject)   ACAPI.SetDistributionObject();   setInfo("info-dist","Объект задан"); }
     function SetDistributionStep () {
       const s = parseNumber(document.getElementById('distStep'), 0);
       const step = (isFinite(s) && s > 0) ? s : 0;
-      ACAPI?.SetDistributionStep && ACAPI.SetDistributionStep(step);
-      if (step > 0) {
+      if (ACAPI?.SetDistributionStep) ACAPI.SetDistributionStep(step);
+      if (step > 0 && ACAPI?.DistributeNow) {
         const payload = "step:" + step;
         AddLog("[UI] Step OK → " + payload);
-        if (ACAPI?.DistributeNow) {
-          ACAPI.DistributeNow(payload).then(ok => setInfo("info-dist", ok ? "✔ Разложено по шагу" : "❌ Ошибка раскладки"));
-        }
-      } else setInfo("info-dist", "Шаг должен быть > 0");
+        ACAPI.DistributeNow(payload).then(ok => setInfo("info-dist", ok ? "✔ Разложено по шагу" : "❌ Ошибка раскладки"));
+      } else if (step <= 0) setInfo("info-dist", "Шаг должен быть > 0");
     }
-
     function SetDistributionCount () {
       const c = parseInt((document.getElementById('distCount').value || "0"), 10);
       const count = (isFinite(c) && c > 0) ? c : 0;
-      ACAPI?.SetDistributionCount && ACAPI.SetDistributionCount(count);
-      if (count > 0) {
+      if (ACAPI?.SetDistributionCount) ACAPI.SetDistributionCount(count);
+      if (count > 0 && ACAPI?.DistributeNow) {
         const payload = "count:" + count;
         AddLog("[UI] Count OK → " + payload);
-        if (ACAPI?.DistributeNow) {
-          ACAPI.DistributeNow(payload).then(ok => setInfo("info-dist", ok ? "✔ Разложено по количеству" : "❌ Ошибка раскладки"));
-        }
-      } else setInfo("info-dist", "Количество должно быть ≥ 1");
+        ACAPI.DistributeNow(payload).then(ok => setInfo("info-dist", ok ? "✔ Разложено по количеству" : "❌ Ошибка раскладки"));
+      } else if (count <= 0) setInfo("info-dist", "Количество должно быть ≥ 1");
     }
-
     function CreateSlabAlongCurve(){
       const w = parseNumber(document.getElementById('slabWidth'), 0);
-      ACAPI?.CreateSlabAlongCurve && ACAPI.CreateSlabAlongCurve(w);
+      if (ACAPI?.CreateSlabAlongCurve) ACAPI.CreateSlabAlongCurve(w);
       setInfo("info-build","Перекрытие, ширина=" + w);
     }
     function CreateShellAlongCurve(){
       const w = parseNumber(document.getElementById('shellWidth'), 0);
-      ACAPI?.CreateShellAlongCurve && ACAPI.CreateShellAlongCurve(w);
+      if (ACAPI?.CreateShellAlongCurve) ACAPI.CreateShellAlongCurve(w);
       setInfo("info-build","Оболочка, ширина=" + w);
     }
-
     function GenerateGDLFromSelection() {
       if (!ACAPI?.GenerateGDLFromSelection) { AddLog('[UI] ACAPI.GenerateGDLFromSelection недоступен'); return; }
       ACAPI.GenerateGDLFromSelection().then(code => {
@@ -136,20 +180,110 @@
       });
     }
 
-    // ---------- вкладки (глобально!) ----------
+    // ================= ПРИЗЕМЛЕНИЕ / СМЕЩЕНИЕ =================
+    // ΔZ БЕЗ MESH: SetGroundObjects + (новый или старый) ApplyZDelta
+    async function ApplyZDeltaUI() {
+      const A = window.ACAPI;
+      if (!A) { AddLog('[ZDelta] ACAPI недоступен'); return; }
+
+      const btn = document.getElementById('btnApplyOffset');
+      btn?.setAttribute('disabled','disabled');
+
+      const mm = parseNumber(document.getElementById('groundOffset'), 0);
+      const meters = mm / 1000.0;
+      AddLog('[ZDelta] ΔZ = ' + mm + ' мм (' + meters + ' м)');
+      if (!isFinite(meters)) { setInfo('info-ground','Некорректное значение смещения'); btn?.removeAttribute('disabled'); return; }
+      if (Math.abs(meters) < 1e-9) AddLog('[ZDelta] WARNING: delta≈0 — визуально может не измениться');
+
+      try {
+        const okObjs = await A.SetGroundObjects();
+        AddLog('[ZDelta] SetGroundObjects → ' + okObjs);
+        if (!okObjs) { setInfo('info-ground','Выберите объекты/колонны/светильники.'); return; }
+
+        let applied = false;
+        if (typeof A.SetZDelta === 'function' && typeof A.ApplyZDelta === 'function' && A.ApplyZDelta.length === 0) {
+          // НОВЫЙ протокол: сначала буфером (строкой), потом вызов без аргумента
+          AddLog('[ZDelta] Новый протокол: SetZDelta(m as string) → ApplyZDelta()');
+          await A.SetZDelta(String(meters));
+          applied = await A.ApplyZDelta();
+        } else if (typeof A.ApplyZDelta === 'function') {
+          // СТАРЫЙ протокол: единый вызов c числом
+          AddLog('[ZDelta] Старый протокол: ApplyZDelta(m as number)');
+          applied = await A.ApplyZDelta(meters);
+        } else {
+          throw new Error('ACAPI.ApplyZDelta недоступен');
+        }
+
+        setInfo('info-ground', applied ? '✔ Смещение выполнено (' + mm + ' мм)' : '❌ Ошибка смещения');
+        AddLog('[ZDelta] Apply → ' + applied);
+        if (applied) UpdateSelectedElements();
+      } catch (e) {
+        AddLog('[ZDelta] Ошибка: ' + e);
+        setInfo('info-ground','Ошибка смещения — см. лог');
+      } finally {
+        btn?.removeAttribute('disabled');
+      }
+    }
+
+    // ПОСАДКА НА MESH: SetGroundSurface + SetGroundObjects + ApplyGroundOffset(0)
+    async function LandToMeshUI() {
+      const A = window.ACAPI;
+      if (!A) { AddLog('[Ground] ACAPI недоступен'); return; }
+
+      const btnApply = document.getElementById('btnApplyOffset');
+      const btnLand  = document.getElementById('btnLand');
+      btnApply?.setAttribute('disabled','disabled');
+      btnLand ?.setAttribute('disabled','disabled');
+      setInfo('info-ground','Приземляю на поверхность…');
+
+      try {
+        const okSurf = await A.SetGroundSurface();
+        AddLog('[Ground] SetGroundSurface → ' + okSurf);
+        if (!okSurf) { setInfo('info-ground','Выберите Поверхность (3D-сетку).'); return; }
+
+        const okObjs = await A.SetGroundObjects();
+        AddLog('[Ground] SetGroundObjects → ' + okObjs);
+        if (!okObjs) { setInfo('info-ground','Выберите объекты/колонны/светильники.'); return; }
+
+        const applied = await A.ApplyGroundOffset(0.0); // offset игнорируется на C++
+        AddLog('[Ground] ApplyGroundOffset(0) → ' + applied);
+        setInfo('info-ground', applied ? '✔ Приземлено на Mesh' : '❌ Ошибка приземления');
+        if (applied) UpdateSelectedElements();
+      } catch (e) {
+        AddLog('[Ground] Ошибка: ' + e);
+        setInfo('info-ground','Ошибка при приземлении — см. лог');
+      } finally {
+        btnApply?.removeAttribute('disabled');
+        btnLand ?.removeAttribute('disabled');
+      }
+    }
+
+    // ===== совместимость со старым мостом (не мешают текущей логике) =====
+    function onShift(mm) {
+      const m = parseFloat(mm) / 1000;
+      AddLog(`[UI] Shift click, delta=${m} m`);
+      if (window.ACAPI_Call) ACAPI_Call('ApplyZDelta', m);
+    }
+    function onLand() {
+      AddLog(`[UI] Land click`);
+      if (window.ACAPI_Call) ACAPI_Call('ApplyGroundOffset', 0.0);
+    }
+
+    // =============== вкладки / init ===============
     function openTab(evt, tabId) {
       const contents = document.getElementsByClassName("tabcontent");
       const links = document.getElementsByClassName("tablink");
       for (let i = 0; i < contents.length; i++) contents[i].style.display = "none";
       for (let i = 0; i < links.length; i++) links[i].classList.remove("active");
-      document.getElementById(tabId).style.display = "block";
+      const tab = document.getElementById(tabId);
+      if (tab) tab.style.display = "block";
       evt.currentTarget.classList.add("active");
+      AddLog('[UI] Tab → ' + tabId);
     }
-    window.openTab = openTab; // чтобы было доступно из onclick
+    window.openTab = openTab;
 
-    // ---------- init + делегатор помощи ----------
     window.addEventListener('DOMContentLoaded', function () {
-      AddLog("[UI] Ready");
+      AddLog("[UI] Ready (UI v0.4)");
 
       // Enter-нажатия для числовых полей
       const step = document.getElementById('distStep');
@@ -157,17 +291,21 @@
       step?.addEventListener('keydown', e => { if (e.key === 'Enter') SetDistributionStep(); });
       cnt ?.addEventListener('keydown',  e => { if (e.key === 'Enter') SetDistributionCount(); });
 
+      // Enter по смещению — как «Применить» (ΔZ)
+      const offset = document.getElementById('groundOffset');
+      offset?.addEventListener('keydown', e => { if (e.key === 'Enter') whenACAPIReadyDo(ApplyZDeltaUI); });
+
       // Делегирование кликов по любым элементам с data-help-url
       document.addEventListener('click', function (e) {
         const el = e.target.closest('[data-help-url]');
         if (!el) return;
-
         e.preventDefault();
         const url = el.getAttribute('data-help-url') || 'https://landscape.227.info/help/start';
         AddLog('[UI] help → ' + url);
 
-        if (window.ACAPI && typeof ACAPI.OpenHelp === 'function') {
-          Promise.resolve(ACAPI.OpenHelp(url))
+        const A = window.ACAPI;
+        if (A && typeof A.OpenHelp === 'function') {
+          Promise.resolve(A.OpenHelp(url))
             .then(() => AddLog('[UI] ACAPI.OpenHelp ok'))
             .catch(err => AddLog('[UI] ACAPI.OpenHelp error: ' + err));
         } else {
@@ -176,8 +314,14 @@
         }
       });
 
-      UpdateSelectedElements();
-      document.getElementById("defaultTab").click();
+      // ждём мост и только затем обновляем таблицу
+      whenACAPIReadyDo(() => {
+        UpdateSelectedElements();
+      });
+
+      // вкладка по умолчанию
+      const def = document.getElementById("defaultTab");
+      if (def) def.click();
     });
   </script>
 </head>
@@ -233,7 +377,7 @@
     </fieldset>
 
     <button class="tab-help"
-            data-help-url="https://landscape.227.info/help/distribution?embed=1"
+            data-help-url="https://landscape.227.info/help/buildshell?embed=1"
             data-help-title="Справка: Построение">Помощь</button>
   </div>
 
@@ -289,15 +433,21 @@
   <div id="tab-ground" class="tabcontent">
     <fieldset class="control-block">
       <legend>Приземление</legend>
+
       <div style="text-align:center; margin-bottom:10px;">
         <label>Смещение Z (мм):</label>
         <input type="number" id="groundOffset" step="1" value="0">
+        <!-- Применить = ΔZ -->
+        <input id="btnApplyOffset" type="button" onclick="whenACAPIReadyDo(ApplyZDeltaUI)" value="Применить">
       </div>
+
       <div style="text-align:center;">
-        <input type="button" onclick="GroundLanding()" value="Приземлить">
+        <!-- Приземлить = посадка на mesh -->
+        <input id="btnLand" type="button" onclick="whenACAPIReadyDo(LandToMeshUI)" value="Приземлить">
       </div>
+
       <div id="info-ground" class="info-box">
-        Подсказка: выделите Поверхность (3D-сетку) + объекты, задайте смещение в мм и нажмите «Приземлить».
+        Режимы: «Применить» — просто сдвиг по Z (без mesh). «Приземлить» — посадка на выделенную 3D-сетку (смещение игнорируется).
       </div>
     </fieldset>
 

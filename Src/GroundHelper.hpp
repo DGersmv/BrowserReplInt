@@ -6,19 +6,16 @@
 
 class GroundHelper {
 public:
-    // выбрать поверхность (Mesh) из текущего выделения
     static bool SetGroundSurface();
-
-    // собрать GUID’ы объектов для "посадки" из текущего выделения (Object/Lamp/Column)
     static bool SetGroundObjects();
-
-    // посадить выбранные объекты на поверхность (с офсетом по Z)
-    static bool ApplyGroundOffset(double offset);
-
-    // получить Z и нормаль поверхности в XY-точке
     static bool GetGroundZAndNormal(const API_Coord3D& pos3D, double& z, API_Vector3D& normal);
 
-    // быстрая отладка одного выбранного элемента
+    // Приземлить на mesh (offset игнорируется, ставим ровно на поверхность)
+    static bool ApplyGroundOffset(double /*offset*/);
+
+    // Смещение по Z без mesh/TIN
+    static bool ApplyZDelta(double deltaMeters);
+
     static bool DebugOneSelection();
 };
 
