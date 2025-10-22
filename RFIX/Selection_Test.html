@@ -180,6 +180,53 @@
       });
     }
 
+    // ================= РАЗМЕТКА =================
+    function CreateMarkup() {
+      const A = window.ACAPI;
+      if (!A) { AddLog('[Markup] ACAPI недоступен'); return; }
+      if (!A.SetMarkupStep || !A.CreateMarkupDimensions) {
+        AddLog('[Markup] API функции недоступны');
+        setInfo('info-markup', '❌ Функция недоступна (обновите плагин)');
+        return;
+      }
+
+      const stepMM = parseNumber(document.getElementById('markupStep'), 1000);
+      if (stepMM <= 0) {
+        setInfo('info-markup', 'Шаг должен быть > 0');
+        return;
+      }
+
+      AddLog('[Markup] Шаг = ' + stepMM + ' мм');
+      setInfo('info-markup', 'Задайте направление карандашом...');
+
+      // Устанавливаем шаг (передаём как строку, как в SetZDelta!)
+      const stepOk = A.SetMarkupStep(String(stepMM));
+      AddLog('[Markup] SetMarkupStep вызван с: ' + stepMM + ' (as string)');
+      
+      // Проверяем результат через Promise (если функция async)
+      Promise.resolve(stepOk).then(ok => {
+        AddLog('[Markup] SetMarkupStep результат: ' + ok);
+        if (!ok) {
+          setInfo('info-markup', '❌ Не удалось установить шаг');
+          return;
+        }
+
+        // Вызываем разметку (блокирует UI, запрашивает линию)
+        return A.CreateMarkupDimensions();
+      }).then(created => {
+        if (created) {
+          setInfo('info-markup', '✔ Разметка создана!');
+          AddLog('[Markup] SUCCESS');
+        } else {
+          setInfo('info-markup', '❌ Не удалось создать разметку (см. лог)');
+          AddLog('[Markup] FAILED');
+        }
+      }).catch(e => {
+        AddLog('[Markup] Ошибка: ' + e);
+        setInfo('info-markup', '❌ Ошибка: ' + e);
+      });
+    }
+
     // ================= ПРИЗЕМЛЕНИЕ / СМЕЩЕНИЕ =================
     // ΔZ БЕЗ MESH: SetGroundObjects + (новый или старый) ApplyZDelta
     async function ApplyZDeltaUI() {
@@ -320,8 +367,12 @@
       });
 
       // вкладка по умолчанию
-      const def = document.getElementById("defaultTab");
-      if (def) def.click();
+      // const def = document.getElementById("defaultTab");
+      // if (def) def.click();
+      
+      // Открываем вкладку "Распределение" по умолчанию
+      const distribTab = document.querySelector('button[onclick*="tab-distrib"]');
+      if (distribTab) distribTab.click();
     });
   </script>
 </head>
@@ -338,14 +389,16 @@
 
   <!-- Вкладки -->
   <div class="tabs">
-    <button id="defaultTab" class="tablink" onclick="openTab(event,'tab-build')">Построение</button>
+    <!-- <button id="defaultTab" class="tablink" onclick="openTab(event,'tab-build')">Построение</button> -->
     <button class="tablink" onclick="openTab(event,'tab-distrib')">Распределение</button>
     <button class="tablink" onclick="openTab(event,'tab-orient')">Ориентация</button>
     <button class="tablink" onclick="openTab(event,'tab-ground')">Приземление</button>
+    <button class="tablink" onclick="openTab(event,'tab-markup')">Разметка</button>
     <button class="tablink" onclick="openTab(event,'tab-gdl')">GDL</button>
   </div>
 
   <!-- Построение -->
+  <!--
   <div id="tab-build" class="tabcontent">
     <fieldset class="control-block">
       <legend>Перекрытие по линии</legend>
@@ -380,6 +433,7 @@
             data-help-url="https://landscape.227.info/help/buildshell?embed=1"
             data-help-title="Справка: Построение">Помощь</button>
   </div>
+  -->
 
   <!-- Распределение -->
   <div id="tab-distrib" class="tabcontent">
@@ -454,6 +508,42 @@
     <button class="tab-help"
             data-help-url="https://landscape.227.info/help/ground?embed=1"
             data-help-title="Справка: Приземление">Помощь</button>
+  </div>
+
+  <!-- Разметка -->
+  <div id="tab-markup" class="tabcontent">
+    <fieldset class="control-block">
+      <legend>Разметка размерами</legend>
+
+      <div style="text-align:center; margin-bottom:10px;">
+        <p style="font-size:12px; color:#666;">
+          1. Выделите элементы (Mesh/Slab/Wall/Shell)<br>
+          2. Задайте шаг<br>
+          3. Нажмите кнопку и кликните <b>2 точки</b> для направления
+        </p>
+      </div>
+
+      <div>
+        <label>Шаг разметки (мм):</label>
+        <input type="number" id="markupStep" step="1" value="1000">
+      </div>
+
+      <div style="text-align:center; margin-top:15px;">
+        <input type="button" 
+               onclick="CreateMarkup()" 
+               value="📏 Разметить"
+               style="font-size:16px; padding:8px 20px; font-weight:bold;">
+      </div>
+
+      <div id="info-markup" class="info-box">
+        Создаёт размеры ШИРИНЫ элемента перпендикулярно направлению.<br>
+        Линия направления не обязана проходить через элемент - можно задать сбоку (например, вдоль забора).
+      </div>
+    </fieldset>
+
+    <button class="tab-help"
+            data-help-url="https://landscape.227.info/help/markup?embed=1"
+            data-help-title="Справка: Разметка">Помощь</button>
   </div>
 
   <!-- GDL -->

@@ -118,6 +118,8 @@ namespace BuildHelper {
 		GSErrCode e = ACAPI_Element_GetDefaults(&slab, nullptr);
 		if (e != NoError) return e;
 
+
+
 		API_ElementMemo memo = {};
 		BNZeroMemory(&memo, sizeof(API_ElementMemo));
 

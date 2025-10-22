@@ -10,6 +10,7 @@
 #include "GroundHelper.hpp"
 #include "BuildHelper.hpp"
 #include "GDLHelper.hpp"
+#include "MarkupHelper.hpp"
 #include "HelpPalette.hpp"
 
 
@@ -359,6 +360,37 @@ void BrowserRepl::RegisterACAPIJavaScriptObject()
 			}
 		}
 		return new JS::Value(true);
+		}));
+
+	// --- Markup API (разметка размерами) ---
+	jsACAPI->AddItem(new JS::Function("SetMarkupStep", [](GS::Ref<JS::Base> param) {
+		// Диагностика: проверяем что пришло
+		if (BrowserRepl::HasInstance()) {
+			if (param == nullptr) {
+				BrowserRepl::GetInstance().LogToBrowser("[JS] SetMarkupStep: param is nullptr!");
+			} else if (GS::Ref<JS::Value> v = GS::DynamicCast<JS::Value>(param)) {
+				const auto t = v->GetType();
+				if (t == JS::Value::DOUBLE || t == JS::Value::INTEGER) {
+					BrowserRepl::GetInstance().LogToBrowser(GS::UniString::Printf("[JS] SetMarkupStep: got number %.6f", v->GetDouble()));
+				} else if (t == JS::Value::STRING) {
+					BrowserRepl::GetInstance().LogToBrowser("[JS] SetMarkupStep: got string '" + v->GetString() + "'");
+				} else {
+					BrowserRepl::GetInstance().LogToBrowser(GS::UniString::Printf("[JS] SetMarkupStep: got type %d", (int)t));
+				}
+			} else {
+				BrowserRepl::GetInstance().LogToBrowser("[JS] SetMarkupStep: param is not JS::Value");
+			}
+		}
+		
+		const double stepMM = GetDoubleFromJs(param, 0.0);
+		if (BrowserRepl::HasInstance())
+			BrowserRepl::GetInstance().LogToBrowser(GS::UniString::Printf("[JS] SetMarkupStep parsed=%.1f mm", stepMM));
+		return new JS::Value(MarkupHelper::SetMarkupStep(stepMM));
+		}));
+
+	jsACAPI->AddItem(new JS::Function("CreateMarkupDimensions", [](GS::Ref<JS::Base>) {
+		if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser("[JS] CreateMarkupDimensions()");
+		return new JS::Value(MarkupHelper::CreateMarkupDimensions());
 		}));
 
 	// --- Register object in the browser ---
