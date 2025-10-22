@@ -20,12 +20,12 @@ namespace LandscapeHelper {
 	static int       g_count = 1;
 
 	static inline void LogA(const char* s) {
-		if (BrowserRepl::HasInstance())
-			BrowserRepl::GetInstance().LogToBrowser(GS::UniString(s));
+		// if (BrowserRepl::HasInstance())
+		//	BrowserRepl::GetInstance().LogToBrowser(GS::UniString(s));
 	}
 	static inline void Log(const GS::UniString& s) {
-		if (BrowserRepl::HasInstance())
-			BrowserRepl::GetInstance().LogToBrowser(s);
+		// if (BrowserRepl::HasInstance())
+		//	BrowserRepl::GetInstance().LogToBrowser(s);
 	}
 	static inline double UiStepToMeters(double stepMm) { return stepMm / 1000.0; }
 

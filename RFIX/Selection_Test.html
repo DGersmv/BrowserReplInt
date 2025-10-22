@@ -150,7 +150,7 @@
       if (step > 0 && ACAPI?.DistributeNow) {
         const payload = "step:" + step;
         AddLog("[UI] Step OK → " + payload);
-        ACAPI.DistributeNow(payload).then(ok => setInfo("info-dist", ok ? "✔ Разложено по шагу" : "❌ Ошибка раскладки"));
+        ACAPI.DistributeNow(payload).then(ok => setInfo("info-dist", ok ? " Разложено по шагу" : " Ошибка раскладки"));
       } else if (step <= 0) setInfo("info-dist", "Шаг должен быть > 0");
     }
     function SetDistributionCount () {
@@ -160,7 +160,7 @@
       if (count > 0 && ACAPI?.DistributeNow) {
         const payload = "count:" + count;
         AddLog("[UI] Count OK → " + payload);
-        ACAPI.DistributeNow(payload).then(ok => setInfo("info-dist", ok ? "✔ Разложено по количеству" : "❌ Ошибка раскладки"));
+        ACAPI.DistributeNow(payload).then(ok => setInfo("info-dist", ok ? " Разложено по количеству" : " Ошибка раскладки"));
       } else if (count <= 0) setInfo("info-dist", "Количество должно быть ≥ 1");
     }
     function CreateSlabAlongCurve(){
@@ -186,7 +186,7 @@
       if (!A) { AddLog('[Markup] ACAPI недоступен'); return; }
       if (!A.SetMarkupStep || !A.CreateMarkupDimensions) {
         AddLog('[Markup] API функции недоступны');
-        setInfo('info-markup', '❌ Функция недоступна (обновите плагин)');
+        setInfo('info-markup', ' Функция недоступна (обновите плагин)');
         return;
       }
 
@@ -207,7 +207,7 @@
       Promise.resolve(stepOk).then(ok => {
         AddLog('[Markup] SetMarkupStep результат: ' + ok);
         if (!ok) {
-          setInfo('info-markup', '❌ Не удалось установить шаг');
+          setInfo('info-markup', ' Не удалось установить шаг');
           return;
         }
 
@@ -215,15 +215,42 @@
         return A.CreateMarkupDimensions();
       }).then(created => {
         if (created) {
-          setInfo('info-markup', '✔ Разметка создана!');
+          setInfo('info-markup', ' Разметка создана!');
           AddLog('[Markup] SUCCESS');
         } else {
-          setInfo('info-markup', '❌ Не удалось создать разметку (см. лог)');
+          setInfo('info-markup', ' Не удалось создать разметку (см. лог)');
           AddLog('[Markup] FAILED');
         }
       }).catch(e => {
         AddLog('[Markup] Ошибка: ' + e);
-        setInfo('info-markup', '❌ Ошибка: ' + e);
+        setInfo('info-markup', ' Ошибка: ' + e);
+      });
+    }
+
+    function CreateDimensionsToLine() {
+      const A = window.ACAPI;
+      if (!A) { AddLog('[Dimensions] ACAPI недоступен'); return; }
+      if (!A.CreateDimensionsToLine) {
+        AddLog('[Dimensions] API функция недоступна');
+        setInfo('info-markup', ' Функция недоступна (обновите плагин)');
+        return;
+      }
+
+      AddLog('[Dimensions] Запуск проставления размеров...');
+      setInfo('info-markup', 'Задайте линию карандашом (2 точки)...');
+
+      // Вызываем функцию (блокирует UI, запрашивает линию)
+      Promise.resolve(A.CreateDimensionsToLine()).then(created => {
+        if (created) {
+          setInfo('info-markup', ' Размеры проставлены!');
+          AddLog('[Dimensions] SUCCESS');
+        } else {
+          setInfo('info-markup', ' Не удалось проставить размеры (см. лог)');
+          AddLog('[Dimensions] FAILED');
+        }
+      }).catch(e => {
+        AddLog('[Dimensions] Ошибка: ' + e);
+        setInfo('info-markup', ' Ошибка: ' + e);
       });
     }
 
@@ -261,7 +288,7 @@
           throw new Error('ACAPI.ApplyZDelta недоступен');
         }
 
-        setInfo('info-ground', applied ? '✔ Смещение выполнено (' + mm + ' мм)' : '❌ Ошибка смещения');
+        setInfo('info-ground', applied ? ' Смещение выполнено (' + mm + ' мм)' : ' Ошибка смещения');
         AddLog('[ZDelta] Apply → ' + applied);
         if (applied) UpdateSelectedElements();
       } catch (e) {
@@ -294,7 +321,7 @@
 
         const applied = await A.ApplyGroundOffset(0.0); // offset игнорируется на C++
         AddLog('[Ground] ApplyGroundOffset(0) → ' + applied);
-        setInfo('info-ground', applied ? '✔ Приземлено на Mesh' : '❌ Ошибка приземления');
+        setInfo('info-ground', applied ? ' Приземлено на Mesh' : ' Ошибка приземления');
         if (applied) UpdateSelectedElements();
       } catch (e) {
         AddLog('[Ground] Ошибка: ' + e);
@@ -347,7 +374,13 @@
         const el = e.target.closest('[data-help-url]');
         if (!el) return;
         e.preventDefault();
-        const url = el.getAttribute('data-help-url') || 'https://landscape.227.info/help/start';
+        let url = el.getAttribute('data-help-url') || 'https://landscape.227.info/help/start';
+        
+        // Добавляем cache-busting параметр для обхода кеширования браузера
+        const separator = url.includes('?') ? '&' : '?';
+        const timestamp = Date.now();
+        url = url + separator + 'v=' + timestamp;
+        
         AddLog('[UI] help → ' + url);
 
         const A = window.ACAPI;
@@ -531,13 +564,33 @@
       <div style="text-align:center; margin-top:15px;">
         <input type="button" 
                onclick="CreateMarkup()" 
-               value="📏 Разметить"
+               value="Разметить"
                style="font-size:16px; padding:8px 20px; font-weight:bold;">
       </div>
 
       <div id="info-markup" class="info-box">
         Создаёт размеры ШИРИНЫ элемента перпендикулярно направлению.<br>
+        Размеры расставляются СТРОГО ПО ШАГУ от линии до ближайшей точки контура.<br>
         Линия направления не обязана проходить через элемент - можно задать сбоку (например, вдоль забора).
+      </div>
+    </fieldset>
+
+    <fieldset class="control-block">
+      <legend>Проставить размеры до линии</legend>
+
+      <div style="text-align:center; margin-bottom:10px;">
+        <p style="font-size:12px; color:#666;">
+          1. Выделите объекты, колонны или светильники<br>
+          2. Нажмите кнопку и кликните <b>2 точки</b> для линии<br>
+          3. Размеры появятся перпендикулярно линии от точек привязки
+        </p>
+      </div>
+
+      <div style="text-align:center; margin-top:15px;">
+        <input type="button" 
+               onclick="CreateDimensionsToLine()" 
+               value="Проставить размеры"
+               style="font-size:16px; padding:8px 20px; font-weight:bold;">
       </div>
     </fieldset>
 
