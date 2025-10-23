@@ -132,6 +132,39 @@
       }).catch(err => AddLog('[UI] GetSelectedElements error: ' + err));
     }
 
+    // =============== изменение ID элементов ===============
+    function changeAllSelectedIDs() {
+      const A = window.ACAPI;
+      if (!A || typeof A.ChangeSelectedElementsID !== 'function') {
+        AddLog('[UI] ACAPI.ChangeSelectedElementsID недоступен');
+        return;
+      }
+      
+      const baseID = document.getElementById('baseID').value.trim();
+      if (!baseID) {
+        AddLog('[UI] Введите базовое название для ID элементов');
+        document.getElementById('baseID').focus();
+        return;
+      }
+      
+      AddLog('[UI] Изменяем ID элементов с базовым названием: ' + baseID);
+      
+      A.ChangeSelectedElementsID(baseID).then(function(success) {
+        if (success) {
+          AddLog('[UI] ✅ ID всех выбранных элементов успешно изменены!');
+          setInfo("id-change-info", "✅ ID изменены! Примеры: " + baseID + "-01, " + baseID + "-02, " + baseID + "-03...");
+          document.getElementById('baseID').value = '';
+          setTimeout(UpdateSelectedElements, 1000);
+        } else {
+          AddLog('[UI] ❌ Ошибка при изменении ID элементов');
+          setInfo("id-change-info", "❌ Ошибка! Возможно нет выбранных элементов или элемент не поддерживает изменение ID");
+        }
+      }).catch(function(err) {
+        AddLog('[UI] ❌ Ошибка вызова ChangeSelectedElementsID: ' + err);
+        setInfo("id-change-info", "❌ Ошибка: " + err);
+      });
+    }
+
     // =============== ориентация/раскладка/построение ===============
     function RotateSelection() {
       const s = document.getElementById('rotateAngle').value;
@@ -364,6 +397,10 @@
       const cnt  = document.getElementById('distCount');
       step?.addEventListener('keydown', e => { if (e.key === 'Enter') SetDistributionStep(); });
       cnt ?.addEventListener('keydown',  e => { if (e.key === 'Enter') SetDistributionCount(); });
+      
+      // Enter для поля изменения ID
+      const baseID = document.getElementById('baseID');
+      baseID?.addEventListener('keydown', e => { if (e.key === 'Enter') changeAllSelectedIDs(); });
 
       // Enter по смещению — как «Применить» (ΔZ)
       const offset = document.getElementById('groundOffset');
@@ -419,6 +456,16 @@
     </thead>
     <tbody id="selection"><tr><td colspan="3">Нет выбранных элементов</td></tr></tbody>
   </table>
+
+  <!-- Форма изменения ID -->
+  <fieldset class="control-block" style="margin-bottom: 20px;">
+    <legend>Изменение ID элементов</legend>
+    <label for="baseID">Базовое название:</label>
+    <input type="text" id="baseID" placeholder="Например: Сосна обыкновенная" style="width: 200px; padding: 3px; margin: 3px 0;" />
+    <br>
+    <input type="button" value="Изменить ID всех выбранных элементов" onclick="changeAllSelectedIDs()" style="margin-top: 10px;" />
+    <div class="info-box" id="id-change-info">Введите базовое название и нажмите кнопку. Все выбранные элементы получат ID с порядковыми номерами (например: Сосна обыкновенная-01, Сосна обыкновенная-02...)</div>
+  </fieldset>
 
   <!-- Вкладки -->
   <div class="tabs">
