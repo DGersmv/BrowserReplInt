@@ -65,20 +65,15 @@ bool ChangeSelectedElementsID (const GS::UniString& baseID)
     // Используем Undo-группу для возможности отмены
     GSErrCode err = ACAPI_CallUndoableCommand("Change Elements ID", [&]() -> GSErrCode {
         for (UIndex i = 0; i < selNeigs.GetSize(); ++i) {
-            API_Element element = {};
-            element.header.guid = selNeigs[i].guid;
-            
-            if (ACAPI_Element_Get(&element) != NoError) continue;
-
             // Создаем новый ID: baseID-01, baseID-02, etc.
             GS::UniString newID = baseID;
             if (selNeigs.GetSize() > 1) {
                 newID += GS::UniString::Printf("-%02d", (int)(i + 1));
             }
 
-            // Устанавливаем новый ID
-            if (ACAPI_Element_SetElementInfoString(&element.header.guid, newID) != NoError) {
-                // Если не удалось установить ID, пропускаем элемент
+            // Изменяем ID элемента с помощью правильной функции API
+            if (ACAPI_Element_ChangeElementInfoString(&selNeigs[i].guid, &newID) != NoError) {
+                // Если не удалось изменить ID, пропускаем элемент
                 continue;
             }
         }
