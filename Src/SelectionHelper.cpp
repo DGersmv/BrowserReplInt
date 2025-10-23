@@ -50,4 +50,42 @@ void ModifySelection (const GS::UniString& elemGuidStr, SelectionModification mo
     }
 }
 
+// ---------------- Изменить ID всех выделенных элементов ----------------
+bool ChangeSelectedElementsID (const GS::UniString& baseID)
+{
+    if (baseID.IsEmpty()) return false;
+
+    API_SelectionInfo selectionInfo = {};
+    GS::Array<API_Neig> selNeigs;
+    ACAPI_Selection_Get(&selectionInfo, &selNeigs, false, false);
+    BMKillHandle((GSHandle*)&selectionInfo.marquee.coords);
+
+    if (selNeigs.IsEmpty()) return false;
+
+    // Используем Undo-группу для возможности отмены
+    GSErrCode err = ACAPI_CallUndoableCommand("Change Elements ID", [&]() -> GSErrCode {
+        for (UIndex i = 0; i < selNeigs.GetSize(); ++i) {
+            API_Element element = {};
+            element.header.guid = selNeigs[i].guid;
+            
+            if (ACAPI_Element_Get(&element) != NoError) continue;
+
+            // Создаем новый ID: baseID-01, baseID-02, etc.
+            GS::UniString newID = baseID;
+            if (selNeigs.GetSize() > 1) {
+                newID += GS::UniString::Printf("-%02d", (int)(i + 1));
+            }
+
+            // Устанавливаем новый ID
+            if (ACAPI_Element_SetElementInfoString(&element.header.guid, newID) != NoError) {
+                // Если не удалось установить ID, пропускаем элемент
+                continue;
+            }
+        }
+        return NoError;
+    });
+
+    return err == NoError;
+}
+
 } // namespace SelectionHelper

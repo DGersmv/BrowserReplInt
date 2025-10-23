@@ -223,6 +223,13 @@ void BrowserRepl::RegisterACAPIJavaScriptObject()
 		return ConvertToJavaScriptVariable(true);
 		}));
 
+	jsACAPI->AddItem(new JS::Function("ChangeSelectedElementsID", [](GS::Ref<JS::Base> param) {
+		const GS::UniString baseID = GetStringFromJavaScriptVariable(param);
+		if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser("[JS] ChangeSelectedElementsID " + baseID);
+		const bool success = SelectionHelper::ChangeSelectedElementsID(baseID);
+		return ConvertToJavaScriptVariable(success);
+		}));
+
 	// --- ΔZ API (двухшаговый буфер + совместимость со старым мостом) ---
 	jsACAPI->AddItem(new JS::Function("SetZDelta", [](GS::Ref<JS::Base> param) {
 		g_lastZDeltaMeters = GetDoubleFromJs(param, 0.0);
