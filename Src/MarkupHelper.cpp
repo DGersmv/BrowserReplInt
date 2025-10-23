@@ -17,6 +17,11 @@
 namespace MarkupHelper {
 
 	// ============================================================================
+	// Constants
+	// ============================================================================
+	constexpr double PI = 3.14159265358979323846;
+
+	// ============================================================================
 	// Globals
 	// ============================================================================
 	static double g_stepMeters = 1.0; // Шаг по линии направления (м, внутр. ед.)
@@ -28,7 +33,7 @@ namespace MarkupHelper {
 	{
 		if (BrowserRepl::HasInstance())
 			BrowserRepl::GetInstance().LogToBrowser("[Markup] " + msg);
-		ACAPI_WriteReport("[Markup] %s", false, msg.ToCStr().Get());
+		// ACAPI_WriteReport("[Markup] %s", false, msg.ToCStr().Get());
 	}
 
 	// ============================================================================
@@ -87,399 +92,489 @@ namespace MarkupHelper {
 		return true;
 	}
 
+
 	// ============================================================================
-	// Аппроксимация дуги (по API_PolyArc)
+	// Структура сегмента контура (адаптировано из LandscapeHelper)
 	// ============================================================================
-	static int FindArcRecord(const API_PolyArc* parcs, Int32 nArcs, Int32 begIndex)
-	{
-		if (parcs == nullptr || nArcs <= 0) return -1;
-		for (Int32 i = 0; i < nArcs; ++i)
-			if (parcs[i].begIndex == begIndex)
-				return (int)i;
-		return -1;
+	struct ContourSeg {
+		enum Kind { Line, Arc } kind;
+		Vec2 a{}, b{};        // Line: начало и конец
+		Vec2 c{};             // Arc: центр
+		double r = 0.0;       // Arc: радиус
+		double a0 = 0.0;      // Arc: начальный угол
+		double a1 = 0.0;      // Arc: конечный угол
+		double L = 0.0;       // длина сегмента
+	};
+
+	// ============================================================================
+	// Нормализация угла к диапазону [0, 2π)
+	// ============================================================================
+	static inline double Norm2PI(double a) {
+		const double twoPi = 2.0 * PI;
+		while (a < 0.0) a += twoPi;
+		while (a >= twoPi) a -= twoPi;
+		return a;
 	}
 
-	static void AppendArcApprox(const API_Coord& a, const API_Coord& b, double arcAngle,
-		std::vector<Vec2>& out, double segLen = 0.10) // Уменьшил segLen для точности
+	// ============================================================================
+	// Вычисление CCW-дельты между углами (адаптировано из LandscapeHelper)
+	// ============================================================================
+	static inline double CCWDelta(double a0, double a1) {
+		a0 = Norm2PI(a0);
+		a1 = Norm2PI(a1);
+		double d = a1 - a0;
+		if (d < 0.0) d += 2.0 * PI;
+		return d; // [0, 2π)
+	}
+
+	// ============================================================================
+	// Построение контура из memo с правильной обработкой дуг (адаптировано из LandscapeHelper)
+	// ============================================================================
+	static void BuildContourFromMemo(std::vector<ContourSeg>& out, API_ElementMemo& memo)
 	{
-		Vec2 P0(a), P1(b);
-		Vec2 chord = P1 - P0;
-		const double L = chord.length();
-		if (L < 1e-9 || std::fabs(arcAngle) < 1e-6) { out.emplace_back(P1); return; }
+		if (memo.coords == nullptr) return;
 
-		// Более точная формула для радиуса дуги
-		const double half = L * 0.5;
-		const double sinHalf = std::sin(std::fabs(arcAngle) * 0.5);
-		if (sinHalf < 1e-9) { out.emplace_back(P1); return; }
-		
-		const double R = half / sinHalf;
-		const double h = std::sqrt(std::max(R * R - half * half, 0.0));
+		const Int32 nAll = (Int32)(BMGetHandleSize((GSHandle)memo.coords) / sizeof(API_Coord));
+		const Int32 nPts = std::max<Int32>(0, nAll - 1); // валидные точки: 1..nPts
+		if (nPts < 2) return;
 
-		Vec2 dir = chord.normalized();
-		Vec2 left = dir.perpendicular();
-		int  sgn = (arcAngle > 0.0) ? 1 : -1;
-		Vec2 C = (P0 + P1) * 0.5 + left * (double)(-sgn) * h;
-
-		double a0 = std::atan2(P0.y - C.y, P0.x - C.x);
-		// Адаптивное количество сегментов в зависимости от угла
-		int N = std::max(8, (int)std::ceil((std::fabs(arcAngle) * R) / segLen));
-		N = std::min(N, 64); // Ограничиваем максимум
-		
-		for (int i = 1; i <= N; ++i) {
-			double ang = a0 + (arcAngle * i) / (double)N;
-			out.emplace_back(Vec2(C.x + R * std::cos(ang), C.y + R * std::sin(ang)));
+		// Концы цепочек (для многоконтурных полигонов)
+		std::vector<Int32> ends;
+		if (memo.pends != nullptr) {
+			const Int32 nEnds = (Int32)(BMGetHandleSize((GSHandle)memo.pends) / sizeof(Int32));
+			for (Int32 k = 0; k < nEnds; ++k) {
+				const Int32 ind = (*memo.pends)[k];
+				if (ind >= 1 && ind <= nPts) ends.push_back(ind);
+			}
 		}
-	}
+		if (ends.empty()) ends.push_back(nPts); // одна замкнутая цепочка
 
-	// ============================================================================
-	// Безопасная попытка «обновить» вид (в некоторых SDK нет этих идентификаторов)
-	// ============================================================================
-	static inline void TryRebuildRedraw()
-	{
-#if defined(APIDo_Rebuild) && defined(APIDo_Redraw)
-		ACAPI_Automate(APIDo_Rebuild, nullptr, nullptr);
-		ACAPI_Automate(APIDo_Redraw, nullptr, nullptr);
-#endif
-	}
+		auto isEnd = [&](Int32 i) -> bool {
+			return std::find(ends.begin(), ends.end(), i) != ends.end();
+		};
 
-	// ============================================================================
-	// ShapePrims → собираем контуры (берём самый большой по площади)
-	// ============================================================================
-	static std::vector<std::vector<Vec2>>* g_shapePolys = nullptr;
-
-	static GSErrCode __ACENV_CALL ShapePrimsCollector(const API_PrimElement* prim,
-		const void* par1, const void* par2, const void* par3)
-	{
-		if (g_shapePolys == nullptr || prim == nullptr) return NoError;
-
-		if (prim->header.typeID == API_PrimPolyID) {
-			const API_PrimPoly& info = prim->poly;
-			const API_Coord* coords = reinterpret_cast<const API_Coord*>    (par1);
-			const Int32* pends = reinterpret_cast<const Int32*>        (par2);
-			const API_PolyArc* parcs = reinterpret_cast<const API_PolyArc*>  (par3);
-
-			if (coords == nullptr || pends == nullptr || info.nCoords <= 1 || info.nSubPolys <= 0)
-				return NoError;
-
-			// Обрабатываем ВСЕ контуры, не только внешний
-			for (Int32 sub = 0; sub < info.nSubPolys; ++sub) {
-				const Int32 begInd = pends[sub] + 1;
-				const Int32 endInd = pends[sub + 1];
-
-				std::vector<Vec2> ring;
-				ring.reserve(std::max(0, endInd - begInd + 1));
-				ring.emplace_back(coords[begInd]);
-
-				for (Int32 i = begInd; i < endInd; ++i) {
-					const int aIdx = FindArcRecord(parcs, info.nArcs, i);
-					if (aIdx >= 0) {
-						// Обрабатываем дугу с повышенной точностью
-						AppendArcApprox(coords[i], coords[i + 1], parcs[aIdx].arcAngle, ring, 0.05);
-					} else {
-						ring.emplace_back(coords[i + 1]);
-					}
-				}
-
-				if (!ring.empty()) g_shapePolys->push_back(std::move(ring));
+		// Карта дуг по begIndex
+		std::vector<double> arcByBeg(nPts + 1, 0.0);
+		if (memo.parcs != nullptr) {
+			const Int32 nArcs = (Int32)(BMGetHandleSize((GSHandle)memo.parcs) / sizeof(API_PolyArc));
+			for (Int32 k = 0; k < nArcs; ++k) {
+				const API_PolyArc& pa = (*memo.parcs)[k];
+				if (pa.begIndex >= 1 && pa.begIndex <= nPts - 1)
+					arcByBeg[pa.begIndex] = pa.arcAngle; // со знаком
 			}
 		}
 
-		return NoError;
+		// Обрабатываем все рёбра контура
+		for (Int32 i = 1; i <= nPts - 1; ++i) {
+			if (isEnd(i)) continue; // не соединяем через конец цепочки
+
+			const Int32 j = i + 1;
+			const Vec2 A((*memo.coords)[i]);
+			const Vec2 B((*memo.coords)[j]);
+
+			const double angArc = arcByBeg[i];
+			
+			// Если дуга отсутствует или угол близок к нулю - это прямая линия
+			if (std::fabs(angArc) < 1e-9) {
+				ContourSeg seg;
+				seg.kind = ContourSeg::Line;
+				seg.a = A;
+				seg.b = B;
+				seg.L = (B - A).length();
+				if (seg.L > 1e-9) out.push_back(seg);
+				continue;
+			}
+
+			// Обрабатываем дугу: находим центр и радиус
+			const double dx = B.x - A.x, dy = B.y - A.y;
+			const double chord = std::hypot(dx, dy);
+			if (chord < 1e-9) continue;
+
+			// Радиус дуги по формуле из LandscapeHelper
+			const double r = std::fabs(chord / (2.0 * std::sin(std::fabs(angArc) * 0.5)));
+			
+			// Середина хорды
+			const double mx = (A.x + B.x) * 0.5, my = (A.y + B.y) * 0.5;
+			
+			// Нормаль к хорде
+			const double nx = -dy / chord, ny = dx / chord;
+			
+			// Расстояние от середины хорды до центра
+			const double d = std::sqrt(std::max(r * r - 0.25 * chord * chord, 0.0));
+
+			// Две возможные окружности - выбираем ту, у которой sweep ближе к arcAngle
+			struct Cand { Vec2 c; double a0, a1, L; };
+			auto makeCand = [&](double sx, double sy) -> Cand {
+				const double cx = mx + sx * d, cy = my + sy * d;
+				const double aA = std::atan2(A.y - cy, A.x - cx);
+				const double aB = std::atan2(B.y - cy, B.x - cx);
+				double sweep = (angArc > 0.0) ? CCWDelta(aA, aB) : -CCWDelta(aB, aA);
+				Cand cnd;
+				cnd.c = Vec2(cx, cy);
+				cnd.a0 = aA;
+				cnd.a1 = aA + sweep;
+				cnd.L = r * std::fabs(sweep);
+				return cnd;
+			};
+
+			const Cand c1 = makeCand(nx, ny);
+			const Cand c2 = makeCand(-nx, -ny);
+
+			const double d1 = std::fabs((c1.a1 - c1.a0) - angArc);
+			const double d2 = std::fabs((c2.a1 - c2.a0) - angArc);
+			
+			// ИСПРАВЛЕНИЕ: выбираем центр дуги по минимальной разности (как в LandscapeHelper)
+			const Cand& best = (d1 <= d2 ? c1 : c2);
+			
+			// Отладочная информация для дуг
+			// Log(GS::UniString::Printf("Arc analysis: angArc=%.6f, c1_sweep=%.6f (diff=%.6f), c2_sweep=%.6f (diff=%.6f), chosen=%s (by diff)", 
+			//	angArc, (c1.a1 - c1.a0), d1, (c2.a1 - c2.a0), d2, (d1 <= d2 ? "c1" : "c2")));
+			// Log(GS::UniString::Printf("Arc center: (%.3f,%.3f), r=%.3f, angles=%.3f→%.3f, sweep=%.3f", 
+			//	best.c.x, best.c.y, r, best.a0, best.a1, (best.a1 - best.a0)));
+
+			ContourSeg seg;
+			seg.kind = ContourSeg::Arc;
+			seg.c = best.c;
+			seg.r = r;
+			seg.a0 = best.a0;
+			seg.a1 = best.a1;
+			seg.L = best.L;
+			if (seg.L > 1e-9) out.push_back(seg);
+		}
 	}
 
-	// точный контур элемента из план-проекции (либо fallback из memo/ref-line)
-	static bool GetElementContour(const API_Guid& guid, std::vector<Vec2>& contour)
+	// ============================================================================
+	// Получение контура элемента как сегментов (линии + дуги) через memo
+	// ============================================================================
+	static bool GetElementContourSegments(const API_Guid& guid, std::vector<ContourSeg>& segments)
 	{
-		contour.clear();
+		segments.clear();
 
-		// если доступны соответствующие идентификаторы — дернём «обновление» вида
-		TryRebuildRedraw();
-
-		std::vector<std::vector<Vec2>> cands;
-		g_shapePolys = &cands;
-
-		API_Elem_Head head = {}; head.guid = guid;
-		GSErrCode e = ACAPI_DrawingPrimitive_ShapePrims(head, ShapePrimsCollector);
-		g_shapePolys = nullptr;
-
-		if (e == NoError && !cands.empty()) {
-			// Ищем ВНЕШНИЙ контур (самый большой по площади)
-			size_t best = 0; double bestA = -1.0;
-			for (size_t i = 0; i < cands.size(); ++i) {
-				double a = PolygonArea(cands[i]);
-				Log(GS::UniString::Printf("Candidate %d: area=%.3f, pts=%d", (int)i, a, (int)cands[i].size()));
-				if (a > bestA) { bestA = a; best = i; }
-			}
-			contour = std::move(cands[best]);
-			Log(GS::UniString::Printf("ShapePrims EXTERNAL contour: %d pts (area=%.3f, %d candidates)", 
-				(int)contour.size(), bestA, (int)cands.size()));
-			return true;
-		}
-		
-		Log("ShapePrims failed, trying fallback...");
-
-		// ------ fallback ----------------------------------------------------------
-		API_Element elem = {}; elem.header.guid = guid;
+		API_Element elem = {};
+		elem.header.guid = guid;
 		if (ACAPI_Element_Get(&elem) != NoError) {
-			Log("Failed to get element " + APIGuidToString(guid));
+			// Log("Failed to get element " + APIGuidToString(guid));
 			return false;
 		}
 
 		const API_ElemTypeID tid = elem.header.type.typeID;
 
-		if (tid == API_WallID) {          // реф-линия
-			// Для многосекционных стен получаем полную линию привязки
+		// Для стен - получаем полный контур через memo (включая дуги)
+		if (tid == API_WallID) {
 			API_ElementMemo memo = {};
-			GSErrCode err = ACAPI_Element_GetMemo(guid, &memo, APIMemoMask_Polygon);
-			if (err == NoError && memo.coords != nullptr) {
-				// Используем все точки линии привязки
-				Int32 nCoords = (Int32)(BMGetHandleSize((GSHandle)memo.coords) / sizeof(API_Coord)) - 1;
-				for (Int32 i = 1; i <= nCoords; ++i) {
-					contour.emplace_back((*memo.coords)[i]);
-				}
-				ACAPI_DisposeElemMemoHdls(&memo);
-				Log(GS::UniString::Printf("Wall contour: %d points (full ref line)", nCoords));
-				return true;
-			}
-			ACAPI_DisposeElemMemoHdls(&memo);
+			GSErrCode e = ACAPI_Element_GetMemo(guid, &memo, APIMemoMask_Polygon);
 			
-			// Fallback к простой линии
-			contour.emplace_back(elem.wall.begC);
-			contour.emplace_back(elem.wall.endC);
-			Log("Wall contour: simple ref line");
+			if (e == NoError && memo.coords != nullptr) {
+				// Строим контур с правильной обработкой дуг
+				BuildContourFromMemo(segments, memo);
+				
+				const Int32 nPts = (Int32)(BMGetHandleSize((GSHandle)memo.coords) / sizeof(API_Coord)) - 1;
+				const Int32 nArcs = memo.parcs ? (Int32)(BMGetHandleSize((GSHandle)memo.parcs) / sizeof(API_PolyArc)) : 0;
+				
+				// Log(GS::UniString::Printf("Wall contour built: %d segments from %d points, %d arcs", 
+				//	(int)segments.size(), (int)nPts, (int)nArcs));
+				
+				// Отладочная информация о сегментах стены
+				int lineCount = 0, arcCount = 0;
+				for (const ContourSeg& seg : segments) {
+					if (seg.kind == ContourSeg::Line) {
+						lineCount++;
+						// Log(GS::UniString::Printf("Wall line segment: (%.3f,%.3f) → (%.3f,%.3f), L=%.3f", 
+						//	seg.a.x, seg.a.y, seg.b.x, seg.b.y, seg.L));
+					} else {
+						arcCount++;
+						// Log(GS::UniString::Printf("Wall arc segment: center(%.3f,%.3f), r=%.3f, angles=%.3f→%.3f, L=%.3f", 
+						//	seg.c.x, seg.c.y, seg.r, seg.a0, seg.a1, seg.L));
+					}
+				}
+				// Log(GS::UniString::Printf("Wall segments: %d lines, %d arcs", lineCount, arcCount));
+				
+				ACAPI_DisposeElemMemoHdls(&memo);
+				return !segments.empty();
+			}
+			
+			// Fallback: если не удалось получить memo, используем реф-линию
+			ACAPI_DisposeElemMemoHdls(&memo);
+			ContourSeg seg;
+			seg.kind = ContourSeg::Line;
+			seg.a = Vec2(elem.wall.begC);
+			seg.b = Vec2(elem.wall.endC);
+			seg.L = (seg.b - seg.a).length();
+			segments.push_back(seg);
+			// Log("Wall contour: 1 segment (ref line fallback)");
 			return true;
 		}
 
+		// Для остальных элементов (Mesh, Slab, Shell) - получаем контур через memo
 		API_ElementMemo memo = {};
-		e = ACAPI_Element_GetMemo(guid, &memo, APIMemoMask_Polygon);
-		if (e != NoError || memo.coords == nullptr) {
-			Log("Fallback memo failed (no coords)");
+		GSErrCode e = ACAPI_Element_GetMemo(guid, &memo, APIMemoMask_Polygon);
+		
+		if (e == NoError && memo.coords != nullptr) {
+			// Строим контур с правильной обработкой дуг
+			BuildContourFromMemo(segments, memo);
+			
+			const Int32 nPts = (Int32)(BMGetHandleSize((GSHandle)memo.coords) / sizeof(API_Coord)) - 1;
+			const Int32 nArcs = memo.parcs ? (Int32)(BMGetHandleSize((GSHandle)memo.parcs) / sizeof(API_PolyArc)) : 0;
+			
+			// Log(GS::UniString::Printf("Contour built: %d segments from %d points, %d arcs", 
+			//	(int)segments.size(), (int)nPts, (int)nArcs));
+			
+			// Отладочная информация о сегментах
+			int lineCount = 0, arcCount = 0;
+			for (const ContourSeg& seg : segments) {
+				if (seg.kind == ContourSeg::Line) {
+					lineCount++;
+					// Log(GS::UniString::Printf("Line segment: (%.3f,%.3f) → (%.3f,%.3f), L=%.3f", 
+					//	seg.a.x, seg.a.y, seg.b.x, seg.b.y, seg.L));
+				} else {
+					arcCount++;
+					// Log(GS::UniString::Printf("Arc segment: center(%.3f,%.3f), r=%.3f, angles=%.3f→%.3f, L=%.3f", 
+					//	seg.c.x, seg.c.y, seg.r, seg.a0, seg.a1, seg.L));
+				}
+			}
+			// Log(GS::UniString::Printf("Segments: %d lines, %d arcs", lineCount, arcCount));
+			
 			ACAPI_DisposeElemMemoHdls(&memo);
+			return !segments.empty();
+		}
+		
+		ACAPI_DisposeElemMemoHdls(&memo);
+		// Log("Failed to get element contour from memo");
 			return false;
 		}
 
-		// Получаем контур как в LandscapeHelper - через BuildFromPolyMemo
-		Int32 nSub = (memo.pends != nullptr) ? (Int32)(BMGetHandleSize((GSHandle)memo.pends) / sizeof(Int32)) - 1 : 0;
-		Int32 nArcs = (memo.parcs != nullptr) ? (Int32)(BMGetHandleSize((GSHandle)memo.parcs) / sizeof(API_PolyArc)) : 0;
-		
-		Log(GS::UniString::Printf("Fallback: nSub=%d, nArcs=%d", nSub, nArcs));
-		
-		if (nSub > 0) {
-			// Множественные контуры - ищем внешний с дугами
-			std::vector<std::vector<Vec2>> allContours;
-			for (Int32 sub = 0; sub < nSub; ++sub) {
-				Int32 beg = (*memo.pends)[sub] + 1;
-				Int32 end = (*memo.pends)[sub + 1];
-				std::vector<Vec2> ring;
-				ring.emplace_back((*memo.coords)[beg]);
-				
-				// Обрабатываем сегменты с дугами
-				for (Int32 i = beg; i < end; ++i) {
-					// Ищем дугу для этого сегмента
-					bool hasArc = false;
-					if (nArcs > 0 && memo.parcs != nullptr) {
-						for (Int32 a = 0; a < nArcs; ++a) {
-							if ((*memo.parcs)[a].begIndex == i) {
-								// Найдена дуга - аппроксимируем
-								AppendArcApprox((*memo.coords)[i], (*memo.coords)[i + 1], 
-									(*memo.parcs)[a].arcAngle, ring, 0.05);
-								hasArc = true;
-								break;
-							}
-						}
-					}
-					if (!hasArc) {
-						// Обычный сегмент
-						ring.emplace_back((*memo.coords)[i + 1]);
-					}
-				}
-				if (!ring.empty()) allContours.push_back(std::move(ring));
-			}
-			
-			// Выбираем самый большой по площади
-			if (!allContours.empty()) {
-				size_t best = 0; double bestA = -1.0;
-				for (size_t i = 0; i < allContours.size(); ++i) {
-					double a = PolygonArea(allContours[i]);
-					Log(GS::UniString::Printf("Fallback contour %d: area=%.3f, pts=%d", (int)i, a, (int)allContours[i].size()));
-					if (a > bestA) { bestA = a; best = i; }
-				}
-				contour = std::move(allContours[best]);
-				Log(GS::UniString::Printf("Fallback EXTERNAL contour with arcs: %d pts (area=%.3f)", (int)contour.size(), bestA));
-			}
-		} else {
-			// Один контур с дугами
-			Int32 nCoords = (Int32)(BMGetHandleSize((GSHandle)memo.coords) / sizeof(API_Coord)) - 1;
-			contour.emplace_back((*memo.coords)[1]);
-			
-			for (Int32 i = 1; i < nCoords; ++i) {
-				// Ищем дугу для этого сегмента
-				bool hasArc = false;
-				if (nArcs > 0 && memo.parcs != nullptr) {
-					for (Int32 a = 0; a < nArcs; ++a) {
-						if ((*memo.parcs)[a].begIndex == i) {
-							// Найдена дуга - аппроксимируем
-							AppendArcApprox((*memo.coords)[i], (*memo.coords)[i + 1], 
-								(*memo.parcs)[a].arcAngle, contour, 0.05);
-							hasArc = true;
-							break;
-						}
-					}
-				}
-				if (!hasArc) {
-					// Обычный сегмент
-					contour.emplace_back((*memo.coords)[i + 1]);
-				}
-			}
-			Log(GS::UniString::Printf("Fallback single contour with arcs: %d pts", (int)contour.size()));
-		}
 
-		ACAPI_DisposeElemMemoHdls(&memo);
-		Log(GS::UniString::Printf("Fallback contour: %d pts", (int)contour.size()));
-		return !contour.empty();
+
+	// ============================================================================
+	// Вычисление точки на контуре по параметру расстояния (адаптировано из EvalOnPath)
+	// ============================================================================
+	static void EvalOnContour(const std::vector<ContourSeg>& segments, double s, Vec2* outP, double* outTanAngleRad)
+	{
+		double acc = 0.0;
+		for (const ContourSeg& seg : segments) {
+			if (s > acc + seg.L) { acc += seg.L; continue; }
+			const double f = (seg.L < 1e-9) ? 0.0 : (s - acc) / seg.L;
+
+			if (seg.kind == ContourSeg::Line) {
+				if (outP)           *outP = seg.a + (seg.b - seg.a) * f;
+				if (outTanAngleRad) *outTanAngleRad = std::atan2(seg.b.y - seg.a.y, seg.b.x - seg.a.x);
+			}
+			else {
+				// Для дуг - правильная параметризация (скопировано из EvalOnPath)
+				const double sweep = seg.a1 - seg.a0;  // со знаком!
+				const double ang = seg.a0 + f * sweep;
+				if (outP)           *outP = Vec2(seg.c.x + seg.r * std::cos(ang), seg.c.y + seg.r * std::sin(ang));
+				if (outTanAngleRad) *outTanAngleRad = ang + ((sweep >= 0.0) ? +PI / 2.0 : -PI / 2.0);
+			}
+			return;
+		}
+		// Если s выходит за пределы - берем последнюю точку
+		const ContourSeg& seg = segments.back();
+		if (seg.kind == ContourSeg::Line) {
+			if (outP)           *outP = seg.b;
+			if (outTanAngleRad) *outTanAngleRad = std::atan2(seg.b.y - seg.a.y, seg.b.x - seg.a.x);
+		}
+		else {
+			if (outP)           *outP = Vec2(seg.c.x + seg.r * std::cos(seg.a1), seg.c.y + seg.r * std::sin(seg.a1));
+			if (outTanAngleRad) *outTanAngleRad = seg.a1 + ((seg.a1 - seg.a0 >= 0.0) ? +PI / 2.0 : -PI / 2.0);
+		}
 	}
 
 	// ============================================================================
-	// Пересечения с одним контуром: ближайшее по заданному лучу
+	// Поиск пересечения луча с дугой (возвращает БЛИЖАЙШЕЕ пересечение)
 	// ============================================================================
-	static bool NearestRayIntersection(const Vec2& origin, const Vec2& dirUnit,
-		const std::vector<Vec2>& poly,
-		Vec2& hit, double& outDist)
+	static bool RayArcIntersection(const Vec2& origin, const Vec2& dirUnit,
+		const Vec2& center, double radius, double a0, double a1,
+		Vec2& intersection, double& distance)
 	{
-		const size_t n = poly.size();
-		if (n < 2) return false;
-
-		const bool closed = (n > 2);
-
-		bool   found = false;
-		double bestD = std::numeric_limits<double>::max();
-		Vec2   bestHit;
-
-		for (size_t i = 0; i < n; ++i) {
-			const Vec2& A = poly[i];
-			const Vec2& B = closed ? poly[(i + 1) % n] : poly[i + 1];
-			if (!closed && i + 1 >= n) break;
-
-			double t, d;
-			if (RaySegmentIntersection(origin, dirUnit, A, B, t, d)) {
-				if (t >= -1e-12 && d < bestD) {
-					bestD = d;
-					bestHit = origin + dirUnit * t;
-					found = true;
-				}
+		// Уравнение луча: P = origin + t * dirUnit
+		// Уравнение окружности: (x - cx)² + (y - cy)² = r²
+		// Подставляем: (ox + t*dx - cx)² + (oy + t*dy - cy)² = r²
+		
+		const double dx = dirUnit.x, dy = dirUnit.y;
+		const double ox = origin.x, oy = origin.y;
+		const double cx = center.x, cy = center.y;
+		
+		// Квадратное уравнение: at² + bt + c = 0
+		const double a = dx*dx + dy*dy;
+		const double b = 2.0 * (dx*(ox - cx) + dy*(oy - cy));
+		const double c = (ox - cx)*(ox - cx) + (oy - cy)*(oy - cy) - radius*radius;
+		
+		const double discriminant = b*b - 4.0*a*c;
+		if (discriminant < 0.0) return false;
+		
+		const double sqrt_disc = std::sqrt(discriminant);
+		const double t1 = (-b - sqrt_disc) / (2.0 * a);
+		const double t2 = (-b + sqrt_disc) / (2.0 * a);
+		
+		// Ищем БЛИЖАЙШЕЕ пересечение в правильном направлении
+		double bestT = std::numeric_limits<double>::max();
+		bool found = false;
+		
+		for (double t : {t1, t2}) {
+			if (t < 1e-12) continue; // пересечение в неправильном направлении
+			
+			Vec2 point = origin + dirUnit * t;
+			double angle = std::atan2(point.y - cy, point.x - cx);
+			// Проверяем принадлежность ТОчКИ дуге по НАПРАВЛЕННОЙ длине дуги
+			// Используем тот же критерий, что и в LandscapeHelper: для CCW берём CCWDelta(a0, angle),
+			// для CW берём CCWDelta(angle, a0). Значение должно лежать в [0, |sweep|].
+			double sweep = a1 - a0; // со знаком
+			angle = Norm2PI(angle);
+			double a0n = Norm2PI(a0);
+			double a1n = Norm2PI(a1);
+			double deltaOnArc = 0.0;
+			if (sweep >= 0.0) {
+				// дуга против часовой: от a0 к a1 по CCW
+				deltaOnArc = CCWDelta(a0n, angle);
+			} else {
+				// дуга по часовой: от a0 к a1 по CW
+				// используем CCWDelta(angle, a0n) для правильного направления
+				deltaOnArc = CCWDelta(angle, a0n);
 			}
-		}
-
-		if (found) {
-			hit = bestHit;
-			outDist = bestD;
+			bool inRange = (deltaOnArc >= -1e-12 && deltaOnArc <= std::fabs(sweep) + 1e-12);
+			
+			// Отладочная информация для пересечений с дугой
+			// Log(GS::UniString::Printf("Arc intersection check: t=%.3f, point=(%.3f,%.3f), angle=%.3f, deltaOnArc=%.3f, sweep=%.3f, inRange=%s", 
+			//	t, point.x, point.y, angle, deltaOnArc, std::fabs(sweep), inRange ? "YES" : "NO"));
+			
+			if (inRange && t < bestT) {
+				bestT = t;
+				intersection = point;
+				distance = t;
+					found = true;
+			}
 		}
 		return found;
 	}
 
 	// ============================================================================
-	// Агрегатор по ВСЕМ контурам: самое ДАЛЬНЕЕ попадание на данной стороне
+	// Поиск ближайшего пересечения луча с контуром
 	// ============================================================================
-	static bool FarthestHitOnSide(const Vec2& origin, const Vec2& sideDirUnit,
-		const std::vector<std::vector<Vec2>>& contours,
-		Vec2& farHit, double& farDist)
+	static bool FindNearestContourIntersection(const Vec2& origin, const Vec2& sideDirUnit,
+		const std::vector<ContourSeg>& segments,
+		Vec2& intersection, double& distance)
 	{
-		bool   ok = false;
-		double maxD = -1.0;
-		Vec2   bestH;
-
-		for (const auto& c : contours) {
-			Vec2 h; double d;
-			if (NearestRayIntersection(origin, sideDirUnit, c, h, d)) {
-				// Проверяем что пересечение ВНЕШНЕЕ (в направлении от центра к origin)
-				Vec2 center = {0, 0};
-				for (const Vec2& pt : c) {
-					center.x += pt.x;
-					center.y += pt.y;
+		double minT = std::numeric_limits<double>::max(); // Ищем ближайшее по ПАРАМЕТРУ t
+		Vec2 bestIntersection;
+		bool found = false;
+		
+		// Ограничиваем поиск разумным радиусом (50 метров)
+		const double maxSearchRadius = 50.0;
+		
+		// Ищем пересечения со всеми сегментами контура
+		for (size_t i = 0; i < segments.size(); ++i) {
+			const ContourSeg& seg = segments[i];
+			if (seg.kind == ContourSeg::Line) {
+				// Линейный сегмент
+				double t, d;
+				if (RaySegmentIntersection(origin, sideDirUnit, seg.a, seg.b, t, d)) {
+					if (t >= -1e-12 && t < minT && d <= maxSearchRadius) { // пересечение в нужном направлении
+						Vec2 intersectionPoint = origin + sideDirUnit * t;
+						
+						// Проверяем, что пересечение на сегменте
+						Vec2 AB = seg.b - seg.a;
+						Vec2 AI = intersectionPoint - seg.a;
+						double dot = AI.dot(AB);
+						double AB_length_sq = AB.dot(AB);
+						
+						if (dot >= 0.0 && dot <= AB_length_sq) {
+						// Log(GS::UniString::Printf("Line intersection #%d: t=%.3f, dist=%.3f, point=(%.3f,%.3f)", 
+						//	(int)i, t, d, intersectionPoint.x, intersectionPoint.y));
+							minT = t;
+							bestIntersection = intersectionPoint;
+							distance = d;
+							found = true;
+						}
+					}
 				}
-				center.x /= c.size();
-				center.y /= c.size();
-				
-				// Вектор от центра к origin
-				Vec2 toOrigin = (origin - center).normalized();
-				// Вектор от центра к пересечению
-				Vec2 toHit = (h - center).normalized();
-				
-				// Скалярное произведение: если > 0, то пересечение в том же направлении (внешнее)
-				double dot = toOrigin.x * toHit.x + toOrigin.y * toHit.y;
-				
-				if (dot > 0.1) { // Внешнее пересечение
-					if (d > maxD) { maxD = d; bestH = h; ok = true; }
+			}
+			else {
+				// Дуга - ИСПРАВЛЕНИЕ: ищем пересечения в правильном направлении
+				Vec2 hit; double d;
+				if (RayArcIntersection(origin, sideDirUnit, seg.c, seg.r, seg.a0, seg.a1, hit, d)) {
+					// Проверяем, что пересечение в правильном направлении (t >= 0)
+					Vec2 toHit = hit - origin;
+					double t = toHit.dot(sideDirUnit);
+					
+					if (t >= -1e-12 && t < minT && d <= maxSearchRadius) {
+					// Log(GS::UniString::Printf("Arc intersection #%d: t=%.3f, dist=%.3f, point=(%.3f,%.3f), center=(%.3f,%.3f), r=%.3f", 
+					//	(int)i, t, d, hit.x, hit.y, seg.c.x, seg.c.y, seg.r));
+						minT = t;
+						bestIntersection = hit;
+						distance = d;
+						found = true;
+					}
 				}
 			}
 		}
-		if (ok) { farDist = maxD; farHit = bestH; }
-		return ok;
+		
+		if (found) {
+			intersection = bestIntersection;
+			return true;
+		}
+		return false;
 	}
 
+
 	// ============================================================================
-	// Создание размера между двумя точками (любой угол) с нулевым зазором свидетеля
+	// Создание размера между двумя точками с умным позиционированием
 	// ============================================================================
 	static bool CreateDimensionBetweenPoints(const API_Coord& pt1, const API_Coord& pt2)
 	{
 		const double dx = pt2.x - pt1.x;
 		const double dy = pt2.y - pt1.y;
 		const double len = std::hypot(dx, dy);
-		if (len < 1e-6) { Log("Dimension too small"); return false; }
+		if (len < 1e-6) return false; // точки совпали
 
-		Vec2 A(pt1), B(pt2);
-		Vec2 u = (B - A).normalized();  // направление размера
-		Vec2 n = u.perpendicular();     // нормаль влево
-		const double offset = 0.50;      // отступ базовой (м)
+		API_Element dim = {};
+		dim.header.type = API_DimensionID;
 
-		API_Element dim = {}; dim.header.type = API_DimensionID;
 		GSErrCode err = ACAPI_Element_GetDefaults(&dim, nullptr);
-		if (err != NoError) { Log("GetDefaults for Dimension failed"); return false; }
+		if (err != NoError) return false;
 
-		// нулевой зазор выносной линии
-		dim.dimension.defWitnessForm = APIWtn_Fix;
-		dim.dimension.defWitnessVal = 0.0;
-
+		// --- Вид и текст как у тебя было, можно оставить/подкрутить при желании ---
 		dim.dimension.dimAppear = APIApp_Normal;
-		dim.dimension.textPos = APIPos_Above;
-		dim.dimension.textWay = APIDir_Parallel;
+		dim.dimension.textPos = APIPos_Above;     // текст над линией
+		dim.dimension.textWay = APIDir_Parallel;  // ориентировать вдоль A→B
 
-		// базовая линия (проходит через refC, направлена как u)
-		Vec2 ref = A + n * offset;
-		dim.dimension.refC.x = ref.x;
-		dim.dimension.refC.y = ref.y;
-		dim.dimension.direction.x = (B.x - A.x);
-		dim.dimension.direction.y = (B.y - A.y);
+		// --- КЛЮЧЕВОЕ: никакого смещения до базовой линии ---
+		dim.dimension.defWitnessForm = APIWtn_Fix;  // фиксированный отступ
+		dim.dimension.defWitnessVal = 0.0;         // отступ 0 => выносных нет по сути
+		dim.dimension.clipOtherSide = true;        // можно оставить true/false — неважно при 0
 
-		// проекция точки P на базовую линию
-		auto footOnBaseline = [&](const Vec2& P) -> API_Coord {
-			double t = (P - ref).dot(u);
-			Vec2   F = ref + u * t;
-			return F.toCoord();
-			};
+		// --- Базовая линия проходит РОВНО через A и B ---
+		dim.dimension.refC.x = pt1.x;
+		dim.dimension.refC.y = pt1.y;
+		dim.dimension.direction.x = dx;   // направление A→B
+		dim.dimension.direction.y = dy;
 
-		API_ElementMemo memo = {}; BNZeroMemory(&memo, sizeof(API_ElementMemo));
+		// --- Узлы размерной цепочки: кладём ТУДА ЖЕ, без проекций ---
+		API_ElementMemo memo = {};
+		BNZeroMemory(&memo, sizeof(API_ElementMemo));
 		dim.dimension.nDimElem = 2;
-		memo.dimElems = reinterpret_cast<API_DimElem**> (
-			BMAllocateHandle(2 * sizeof(API_DimElem), ALLOCATE_CLEAR, 0));
-		if (memo.dimElems == nullptr) { Log("Memory allocation failed for dimElems"); return false; }
+
+		memo.dimElems = reinterpret_cast<API_DimElem**>(
+			BMAllocateHandle(2 * sizeof(API_DimElem), ALLOCATE_CLEAR, 0)
+			);
+		if (memo.dimElems == nullptr) return false;
 
 		API_DimElem& e1 = (*memo.dimElems)[0];
-		e1.base.loc = pt1; e1.base.base.line = false; e1.base.base.special = false;
-		e1.pos = footOnBaseline(A);
+		e1.base.loc = pt1;
+		e1.base.base.line = false;
+		e1.base.base.special = false;
+		e1.pos = pt1;  // <- на базовой линии
 
 		API_DimElem& e2 = (*memo.dimElems)[1];
-		e2.base.loc = pt2; e2.base.base.line = false; e2.base.base.special = false;
-		e2.pos = footOnBaseline(B);
+		e2.base.loc = pt2;
+		e2.base.base.line = false;
+		e2.base.base.special = false;
+		e2.pos = pt2;  // <- на базовой линии
 
 		err = ACAPI_Element_Create(&dim, &memo);
 		ACAPI_DisposeElemMemoHdls(&memo);
 
-		if (err != NoError) {
-			Log(GS::UniString::Printf("Dimension creation failed: %d", (int)err));
-			return false;
-		}
-		return true;
+		return (err == NoError);
 	}
 
 	// ============================================================================
@@ -487,15 +582,15 @@ namespace MarkupHelper {
 	// ============================================================================
 	bool SetMarkupStep(double stepMM)
 	{
-		if (stepMM <= 0.0) { Log("Invalid step: must be > 0"); return false; }
+		if (stepMM <= 0.0) { /* Log("Invalid step: must be > 0"); */ return false; }
 		g_stepMeters = stepMM / 1000.0;
-		Log(GS::UniString::Printf("Step set: %.1f mm (%.6f m)", stepMM, g_stepMeters));
+		// Log(GS::UniString::Printf("Step set: %.1f mm (%.6f m)", stepMM, g_stepMeters));
 		return true;
 	}
 
 	bool CreateMarkupDimensions()
 	{
-		Log("=== CreateMarkupDimensions START ===");
+		// Log("=== CreateMarkupDimensions START ===");
 
 		// 1) выделение
 		API_SelectionInfo selInfo = {};
@@ -503,10 +598,10 @@ namespace MarkupHelper {
 		ACAPI_Selection_Get(&selInfo, &selNeigs, false, false);
 		BMKillHandle((GSHandle*)&selInfo.marquee.coords);
 
-		if (selNeigs.IsEmpty()) { Log("No elements selected"); return false; }
-		Log(GS::UniString::Printf("Selected elements: %d", (int)selNeigs.GetSize()));
+		if (selNeigs.IsEmpty()) { /* Log("No elements selected"); */ return false; }
+		// Log(GS::UniString::Printf("Selected elements: %d", (int)selNeigs.GetSize()));
 
-		struct ElementContourData { API_Guid guid; std::vector<Vec2> contour; };
+		struct ElementContourData { API_Guid guid; std::vector<ContourSeg> segments; double totalLength; };
 		std::vector<ElementContourData> elements;
 
 		for (const API_Neig& n : selNeigs) {
@@ -518,21 +613,27 @@ namespace MarkupHelper {
 				continue;
 
 			ElementContourData d; d.guid = n.guid;
-			if (GetElementContour(n.guid, d.contour) && !d.contour.empty())
+			if (GetElementContourSegments(n.guid, d.segments) && !d.segments.empty()) {
+				// Вычисляем общую длину контура
+				d.totalLength = 0.0;
+				for (const ContourSeg& seg : d.segments) {
+					d.totalLength += seg.L;
+				}
 				elements.push_back(std::move(d));
+			}
 		}
 
-		if (elements.empty()) { Log("No supported elements (Mesh/Slab/Wall/Shell) in selection"); return false; }
-		Log(GS::UniString::Printf("Valid elements for markup: %d", (int)elements.size()));
+		if (elements.empty()) { /* Log("No supported elements (Mesh/Slab/Wall/Shell) in selection"); */ return false; }
+		// Log(GS::UniString::Printf("Valid elements for markup: %d", (int)elements.size()));
 
 		// 2) направление
 		API_GetPointType gp1 = {}; CHCopyC("Разметка: укажите НАЧАЛО направления (точка 1)", gp1.prompt);
 		GSErrCode err = ACAPI_UserInput_GetPoint(&gp1);
-		if (err != NoError) { Log(GS::UniString::Printf("GetPoint #1 cancelled/failed: %d", (int)err)); return false; }
+		if (err != NoError) { /* Log(GS::UniString::Printf("GetPoint #1 cancelled/failed: %d", (int)err)); */ return false; }
 
 		API_GetPointType gp2 = {}; CHCopyC("Разметка: укажите КОНЕЦ направления (точка 2)", gp2.prompt);
 		err = ACAPI_UserInput_GetPoint(&gp2);
-		if (err != NoError) { Log(GS::UniString::Printf("GetPoint #2 cancelled/failed: %d", (int)err)); return false; }
+		if (err != NoError) { /* Log(GS::UniString::Printf("GetPoint #2 cancelled/failed: %d", (int)err)); */ return false; }
 
 		const Vec2 P1(gp1.pos.x, gp1.pos.y);
 		const Vec2 P2(gp2.pos.x, gp2.pos.y);
@@ -540,50 +641,62 @@ namespace MarkupHelper {
 		const Vec2 perpendicular = direction.perpendicular();
 		const double lineLength = (P2 - P1).length();
 
-		Log(GS::UniString::Printf("Point 1: (%.6f, %.6f)", P1.x, P1.y));
-		Log(GS::UniString::Printf("Point 2: (%.6f, %.6f)", P2.x, P2.y));
-		Log(GS::UniString::Printf("Direction vector: (%.3f, %.3f)", direction.x, direction.y));
-		Log(GS::UniString::Printf("Perpendicular vector: (%.3f, %.3f)", perpendicular.x, perpendicular.y));
-		Log(GS::UniString::Printf("Direction line: P1(%.2f, %.2f) → P2(%.2f, %.2f), length=%.2fm",
-			P1.x, P1.y, P2.x, P2.y, lineLength));
-
-		// Список контуров для агрегатора
-		std::vector<std::vector<Vec2>> contours; contours.reserve(elements.size());
-		for (const auto& e : elements) contours.push_back(e.contour);
+		// Log(GS::UniString::Printf("Point 1: (%.6f, %.6f)", P1.x, P1.y));
+		// Log(GS::UniString::Printf("Point 2: (%.6f, %.6f)", P2.x, P2.y));
+		// Log(GS::UniString::Printf("Direction vector: (%.3f, %.3f)", direction.x, direction.y));
+		// Log(GS::UniString::Printf("Perpendicular vector: (%.3f, %.3f)", perpendicular.x, perpendicular.y));
+		// Log(GS::UniString::Printf("Direction line: P1(%.2f, %.2f) → P2(%.2f, %.2f), length=%.2fm",
+		//	P1.x, P1.y, P2.x, P2.y, lineLength));
 
 		// 3) определяем глобальную сторону (+⊥ или -⊥) и первое попадание.
 		Vec2 firstHit; double firstTOnLine = -1.0; int sideSign = 0;
 
+		// Ищем первое пересечение, пробуя разные точки на линии направления
 		for (double t = 0.0; t <= lineLength + 1e-9; t += std::max(0.05, g_stepMeters * 0.1)) {
 			const Vec2 origin = P1 + direction * t;
 
+			// Проверяем пересечения с контурами всех элементов
+			for (const auto& e : elements) {
 			Vec2 hit; double d;
-
-			if (FarthestHitOnSide(origin, perpendicular, contours, hit, d)) { firstHit = hit; firstTOnLine = t; sideSign = +1; break; }
-			if (FarthestHitOnSide(origin, (perpendicular * -1.0), contours, hit, d)) { firstHit = hit; firstTOnLine = t; sideSign = -1; break; }
+				if (FindNearestContourIntersection(origin, perpendicular, e.segments, hit, d)) {
+					firstHit = hit; firstTOnLine = t; sideSign = +1; break;
+				}
+				if (FindNearestContourIntersection(origin, (perpendicular * -1.0), e.segments, hit, d)) {
+					firstHit = hit; firstTOnLine = t; sideSign = -1; break;
+				}
+			}
+			if (sideSign != 0) break;
 		}
-		if (sideSign == 0) { Log("No intersection found with any element contour"); return false; }
+		if (sideSign == 0) { /* Log("No intersection found with any element contour"); */ return false; }
 
-		Log(GS::UniString::Printf("First hit at t=%.3f, side=%s", firstTOnLine, sideSign > 0 ? "+⊥" : "-⊥"));
+		// Log(GS::UniString::Printf("First hit at t=%.3f, side=%s", firstTOnLine, sideSign > 0 ? "+⊥" : "-⊥"));
 
-		// 4) шаги вдоль линии и попадания только на выбранной стороне.
+		// 4) Строго по шагу: размеры через каждый заданный шаг
 		std::vector<std::pair<Vec2, Vec2>> dimensionPairs;
 		dimensionPairs.push_back({ P1 + direction * firstTOnLine, firstHit });
 
 		const Vec2 sideDir = (sideSign > 0 ? perpendicular : perpendicular * -1.0);
 
+		// Простой цикл по шагу - строго через каждый g_stepMeters
 		for (double t = firstTOnLine + g_stepMeters; t <= lineLength + 1e-9; t += g_stepMeters) {
 			const Vec2 origin = P1 + direction * t;
 
 			Vec2 hit; double d;
-			if (FarthestHitOnSide(origin, sideDir, contours, hit, d)) {
+			bool found = false;
+			
+			// Ищем пересечения с контурами всех элементов
+			for (const auto& e : elements) {
+				if (FindNearestContourIntersection(origin, sideDir, e.segments, hit, d)) {
 				dimensionPairs.push_back({ origin, hit });
-				Log(GS::UniString::Printf("Pair t=%.3f: (%.3f,%.3f) → (%.3f,%.3f)",
-					t, origin.x, origin.y, hit.x, hit.y));
+					// Log(GS::UniString::Printf("Step pair t=%.3f: (%.3f,%.3f) → (%.3f,%.3f)",
+					// t, origin.x, origin.y, hit.x, hit.y));
+					found = true;
+					break; // берем ближайшее пересечение
+				}
 			}
 		}
 
-		Log(GS::UniString::Printf("Total dimension pairs: %d", (int)dimensionPairs.size()));
+		// Log(GS::UniString::Printf("Total dimension pairs: %d", (int)dimensionPairs.size()));
 
 		// 5) Undo-группа
 		int createdCount = 0;
@@ -595,7 +708,7 @@ namespace MarkupHelper {
 				if (d > 0.01) {
 					if (CreateDimensionBetweenPoints(A.toCoord(), B.toCoord())) {
 						++createdCount;
-						Log(GS::UniString::Printf("Dimension created: distance=%.3fm", d));
+						// Log(GS::UniString::Printf("Dimension created: distance=%.3fm", d));
 					}
 				}
 			}
@@ -603,17 +716,171 @@ namespace MarkupHelper {
 			});
 
 		if (err == NoError && createdCount > 0) {
-			Log(GS::UniString::Printf("=== SUCCESS: Created %d dimensions ===", createdCount));
+			// Log(GS::UniString::Printf("=== SUCCESS: Created %d dimensions ===", createdCount));
 			return true;
 		}
 		else if (createdCount == 0) {
-			Log("No dimensions created (no intersections found)");
+			// Log("No dimensions created (no intersections found)");
 			return false;
 		}
 		else {
-			Log(GS::UniString::Printf("Undo command failed: err=%d", (int)err));
+			// Log(GS::UniString::Printf("Undo command failed: err=%d", (int)err));
+			return false;
+		}
+	}
+
+	// ============================================================================
+	// Проставить размеры от точек привязки объектов до линии
+	// ============================================================================
+	bool CreateDimensionsToLine()
+	{
+		// Log("=== CreateDimensionsToLine START ===");
+
+		// 1) Получаем выделенные элементы
+		API_SelectionInfo selInfo = {};
+		GS::Array<API_Neig> selNeigs;
+		ACAPI_Selection_Get(&selInfo, &selNeigs, false, false);
+		BMKillHandle((GSHandle*)&selInfo.marquee.coords);
+
+		if (selNeigs.IsEmpty()) { 
+			// Log("No elements selected"); 
+			return false; 
+		}
+		// Log(GS::UniString::Printf("Selected elements: %d", (int)selNeigs.GetSize()));
+
+		// Собираем точки привязки объектов
+		struct ObjectAnchor {
+			API_Guid guid;
+			Vec2 anchor;
+			GS::UniString typeName;
+		};
+		std::vector<ObjectAnchor> objects;
+
+		for (const API_Neig& n : selNeigs) {
+			API_Element elem = {};
+			elem.header.guid = n.guid;
+			if (ACAPI_Element_Get(&elem) != NoError) continue;
+
+			const API_ElemTypeID tid = elem.header.type.typeID;
+			ObjectAnchor obj;
+			obj.guid = n.guid;
+
+			// Определяем точку привязки в зависимости от типа элемента
+			if (tid == API_ObjectID) {
+				obj.anchor = Vec2(elem.object.pos.x, elem.object.pos.y);
+				obj.typeName = "Object";
+				objects.push_back(obj);
+				// Log(GS::UniString::Printf("Object anchor: (%.3f, %.3f)", obj.anchor.x, obj.anchor.y));
+			}
+			else if (tid == API_ColumnID) {
+				obj.anchor = Vec2(elem.column.origoPos.x, elem.column.origoPos.y);
+				obj.typeName = "Column";
+				objects.push_back(obj);
+				// Log(GS::UniString::Printf("Column anchor: (%.3f, %.3f)", obj.anchor.x, obj.anchor.y));
+			}
+			else if (tid == API_LampID) {
+				obj.anchor = Vec2(elem.lamp.pos.x, elem.lamp.pos.y);
+				obj.typeName = "Lamp";
+				objects.push_back(obj);
+				// Log(GS::UniString::Printf("Lamp anchor: (%.3f, %.3f)", obj.anchor.x, obj.anchor.y));
+			}
+		}
+
+		if (objects.empty()) {
+			// Log("No supported elements (Object/Column/Lamp) in selection");
+			return false;
+		}
+		// Log(GS::UniString::Printf("Valid objects for dimensioning: %d", (int)objects.size()));
+
+		// 2) Запрашиваем направление линии (2 точки)
+		API_GetPointType gp1 = {};
+		CHCopyC("Размеры: укажите НАЧАЛО линии (точка 1)", gp1.prompt);
+		GSErrCode err = ACAPI_UserInput_GetPoint(&gp1);
+		if (err != NoError) {
+			// Log(GS::UniString::Printf("GetPoint #1 cancelled/failed: %d", (int)err));
+			return false;
+		}
+
+		API_GetPointType gp2 = {};
+		CHCopyC("Размеры: укажите КОНЕЦ линии (точка 2)", gp2.prompt);
+		err = ACAPI_UserInput_GetPoint(&gp2);
+		if (err != NoError) {
+			// Log(GS::UniString::Printf("GetPoint #2 cancelled/failed: %d", (int)err));
+			return false;
+		}
+
+		const Vec2 P1(gp1.pos.x, gp1.pos.y);
+		const Vec2 P2(gp2.pos.x, gp2.pos.y);
+		const Vec2 lineDir = (P2 - P1).normalized();
+		const double lineLength = (P2 - P1).length();
+
+		if (lineLength < 1e-6) {
+			// Log("Line is too short");
+			return false;
+		}
+
+		// Log(GS::UniString::Printf("Line: P1(%.3f, %.3f) → P2(%.3f, %.3f), length=%.2fm",
+		//	P1.x, P1.y, P2.x, P2.y, lineLength));
+
+		// 3) Для каждого объекта находим проекцию на линию и создаём размер
+		std::vector<std::pair<Vec2, Vec2>> dimensionPairs;
+
+		for (const auto& obj : objects) {
+			// Вектор от P1 к точке объекта
+			Vec2 toObj = obj.anchor - P1;
+			
+			// Проекция на линию: параметр t на отрезке P1->P2
+			double t = toObj.dot(lineDir);
+			
+			// Проекция точки на линию
+			Vec2 projection = P1 + lineDir * t;
+			
+			// Расстояние от объекта до проекции
+			double dist = (obj.anchor - projection).length();
+			
+			// Log(GS::UniString::Printf("%s: anchor(%.3f,%.3f) → projection(%.3f,%.3f), dist=%.3fm",
+			//	obj.typeName.ToCStr().Get(), obj.anchor.x, obj.anchor.y, 
+			//	projection.x, projection.y, dist));
+
+			// Добавляем пару для создания размера (только если расстояние > 0)
+			if (dist > 0.01) { // минимум 1 см
+				dimensionPairs.push_back({ obj.anchor, projection });
+			}
+		}
+
+		if (dimensionPairs.empty()) {
+			// Log("No valid dimensions to create (all objects on the line)");
+			return false;
+		}
+
+		// Log(GS::UniString::Printf("Dimensions to create: %d", (int)dimensionPairs.size()));
+
+		// 4) Создаём размеры в Undo-группе
+		int createdCount = 0;
+		err = ACAPI_CallUndoableCommand("Проставить размеры", [&]() -> GSErrCode {
+			for (const auto& pair : dimensionPairs) {
+				if (CreateDimensionBetweenPoints(pair.first.toCoord(), pair.second.toCoord())) {
+					++createdCount;
+					const double d = (pair.first - pair.second).length();
+					// Log(GS::UniString::Printf("Dimension created: distance=%.3fm", d));
+				}
+			}
+			return NoError;
+		});
+
+		if (err == NoError && createdCount > 0) {
+			// Log(GS::UniString::Printf("=== SUCCESS: Created %d dimensions ===", createdCount));
+			return true;
+		}
+		else if (createdCount == 0) {
+			// Log("No dimensions created");
+			return false;
+		}
+		else {
+			// Log(GS::UniString::Printf("Undo command failed: err=%d", (int)err));
 			return false;
 		}
 	}
 
 } // namespace MarkupHelper
+

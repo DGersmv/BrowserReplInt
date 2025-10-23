@@ -393,6 +393,11 @@ void BrowserRepl::RegisterACAPIJavaScriptObject()
 		return new JS::Value(MarkupHelper::CreateMarkupDimensions());
 		}));
 
+	jsACAPI->AddItem(new JS::Function("CreateDimensionsToLine", [](GS::Ref<JS::Base>) {
+		if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser("[JS] CreateDimensionsToLine()");
+		return new JS::Value(MarkupHelper::CreateDimensionsToLine());
+		}));
+
 	// --- Register object in the browser ---
 	browser.RegisterAsynchJSObject(jsACAPI);
 	LogToBrowser("[C++] JS bridge registered");

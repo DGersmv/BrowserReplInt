@@ -24,7 +24,7 @@ namespace GDLHelper {
 
 	static void Log(const GS::UniString& s)
 	{
-		if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser(s);
+		// if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser(s);
 	}
 
 	static void AppendFormat(GS::UniString& dst, const char* fmt, ...)

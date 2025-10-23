@@ -15,9 +15,9 @@ namespace BuildHelper {
 	// ---------- Utils ----------
 	static inline void Log(const GS::UniString& msg)
 	{
-		if (BrowserRepl::HasInstance())
-			BrowserRepl::GetInstance().LogToBrowser("[Build] " + msg);
-		ACAPI_WriteReport("%s", false, msg.ToCStr().Get());
+		// if (BrowserRepl::HasInstance())
+		//	BrowserRepl::GetInstance().LogToBrowser("[Build] " + msg);
+		// ACAPI_WriteReport("%s", false, msg.ToCStr().Get());
 	}
 
 	static inline bool GuidIsValid(const API_Guid& g) { return !(g == APINULLGuid); }

@@ -12,6 +12,9 @@ namespace MarkupHelper {
     // Создать разметку размерами (вызывает GetLine для направления)
     bool CreateMarkupDimensions();
 
+    // Проставить размеры от точек привязки объектов до линии (перпендикулярно)
+    bool CreateDimensionsToLine();
+
 } // namespace MarkupHelper
 
 #endif // MARKUPHELPER_HPP
