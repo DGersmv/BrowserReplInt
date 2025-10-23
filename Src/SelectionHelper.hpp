@@ -21,6 +21,9 @@ namespace SelectionHelper {
     // Добавить или удалить элемент по GUID
     void ModifySelection (const GS::UniString& elemGuidStr, SelectionModification modification);
 
+    // Изменить ID всех выделенных элементов
+    bool ChangeSelectedElementsID (const GS::UniString& baseID);
+
 } // namespace SelectionHelper
 
 #endif // SELECTIONHELPER_HPP

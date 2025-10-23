@@ -1,0 +1,378 @@
+[1mdiff --git a/RFIX/Selection_Test.html b/RFIX/Selection_Test.html[m
+[1mindex 0d1b773..83bbf83 100644[m
+[1m--- a/RFIX/Selection_Test.html[m
+[1m+++ b/RFIX/Selection_Test.html[m
+[36m@@ -150,7 +150,7 @@[m
+       if (step > 0 && ACAPI?.DistributeNow) {[m
+         const payload = "step:" + step;[m
+         AddLog("[UI] Step OK → " + payload);[m
+[31m-        ACAPI.DistributeNow(payload).then(ok => setInfo("info-dist", ok ? "✔ Разложено по шагу" : "❌ Ошибка раскладки"));[m
+[32m+[m[32m        ACAPI.DistributeNow(payload).then(ok => setInfo("info-dist", ok ? " Разложено по шагу" : " Ошибка раскладки"));[m
+       } else if (step <= 0) setInfo("info-dist", "Шаг должен быть > 0");[m
+     }[m
+     function SetDistributionCount () {[m
+[36m@@ -160,7 +160,7 @@[m
+       if (count > 0 && ACAPI?.DistributeNow) {[m
+         const payload = "count:" + count;[m
+         AddLog("[UI] Count OK → " + payload);[m
+[31m-        ACAPI.DistributeNow(payload).then(ok => setInfo("info-dist", ok ? "✔ Разложено по количеству" : "❌ Ошибка раскладки"));[m
+[32m+[m[32m        ACAPI.DistributeNow(payload).then(ok => setInfo("info-dist", ok ? " Разложено по количеству" : " Ошибка раскладки"));[m
+       } else if (count <= 0) setInfo("info-dist", "Количество должно быть ≥ 1");[m
+     }[m
+     function CreateSlabAlongCurve(){[m
+[36m@@ -186,7 +186,7 @@[m
+       if (!A) { AddLog('[Markup] ACAPI недоступен'); return; }[m
+       if (!A.SetMarkupStep || !A.CreateMarkupDimensions) {[m
+         AddLog('[Markup] API функции недоступны');[m
+[31m-        setInfo('info-markup', '❌ Функция недоступна (обновите плагин)');[m
+[32m+[m[32m        setInfo('info-markup', ' Функция недоступна (обновите плагин)');[m
+         return;[m
+       }[m
+ [m
+[36m@@ -207,7 +207,7 @@[m
+       Promise.resolve(stepOk).then(ok => {[m
+         AddLog('[Markup] SetMarkupStep результат: ' + ok);[m
+         if (!ok) {[m
+[31m-          setInfo('info-markup', '❌ Не удалось установить шаг');[m
+[32m+[m[32m          setInfo('info-markup', ' Не удалось установить шаг');[m
+           return;[m
+         }[m
+ [m
+[36m@@ -215,15 +215,42 @@[m
+         return A.CreateMarkupDimensions();[m
+       }).then(created => {[m
+         if (created) {[m
+[31m-          setInfo('info-markup', '✔ Разметка создана!');[m
+[32m+[m[32m          setInfo('info-markup', ' Разметка создана!');[m
+           AddLog('[Markup] SUCCESS');[m
+         } else {[m
+[31m-          setInfo('info-markup', '❌ Не удалось создать разметку (см. лог)');[m
+[32m+[m[32m          setInfo('info-markup', ' Не удалось создать разметку (см. лог)');[m
+           AddLog('[Markup] FAILED');[m
+         }[m
+       }).catch(e => {[m
+         AddLog('[Markup] Ошибка: ' + e);[m
+[31m-        setInfo('info-markup', '❌ Ошибка: ' + e);[m
+[32m+[m[32m        setInfo('info-markup', ' Ошибка: ' + e);[m
+[32m+[m[32m      });[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    function CreateDimensionsToLine() {[m
+[32m+[m[32m      const A = window.ACAPI;[m
+[32m+[m[32m      if (!A) { AddLog('[Dimensions] ACAPI недоступен'); return; }[m
+[32m+[m[32m      if (!A.CreateDimensionsToLine) {[m
+[32m+[m[32m        AddLog('[Dimensions] API функция недоступна');[m
+[32m+[m[32m        setInfo('info-markup', ' Функция недоступна (обновите плагин)');[m
+[32m+[m[32m        return;[m
+[32m+[m[32m      }[m
+[32m+[m
+[32m+[m[32m      AddLog('[Dimensions] Запуск проставления размеров...');[m
+[32m+[m[32m      setInfo('info-markup', 'Задайте линию карандашом (2 точки)...');[m
+[32m+[m
+[32m+[m[32m      // Вызываем функцию (блокирует UI, запрашивает линию)[m
+[32m+[m[32m      Promise.resolve(A.CreateDimensionsToLine()).then(created => {[m
+[32m+[m[32m        if (created) {[m
+[32m+[m[32m          setInfo('info-markup', ' Размеры проставлены!');[m
+[32m+[m[32m          AddLog('[Dimensions] SUCCESS');[m
+[32m+[m[32m        } else {[m
+[32m+[m[32m          setInfo('info-markup', ' Не удалось проставить размеры (см. лог)');[m
+[32m+[m[32m          AddLog('[Dimensions] FAILED');[m
+[32m+[m[32m        }[m
+[32m+[m[32m      }).catch(e => {[m
+[32m+[m[32m        AddLog('[Dimensions] Ошибка: ' + e);[m
+[32m+[m[32m        setInfo('info-markup', ' Ошибка: ' + e);[m
+       });[m
+     }[m
+ [m
+[36m@@ -261,7 +288,7 @@[m
+           throw new Error('ACAPI.ApplyZDelta недоступен');[m
+         }[m
+ [m
+[31m-        setInfo('info-ground', applied ? '✔ Смещение выполнено (' + mm + ' мм)' : '❌ Ошибка смещения');[m
+[32m+[m[32m        setInfo('info-ground', applied ? ' Смещение выполнено (' + mm + ' мм)' : ' Ошибка смещения');[m
+         AddLog('[ZDelta] Apply → ' + applied);[m
+         if (applied) UpdateSelectedElements();[m
+       } catch (e) {[m
+[36m@@ -294,7 +321,7 @@[m
+ [m
+         const applied = await A.ApplyGroundOffset(0.0); // offset игнорируется на C++[m
+         AddLog('[Ground] ApplyGroundOffset(0) → ' + applied);[m
+[31m-        setInfo('info-ground', applied ? '✔ Приземлено на Mesh' : '❌ Ошибка приземления');[m
+[32m+[m[32m        setInfo('info-ground', applied ? ' Приземлено на Mesh' : ' Ошибка приземления');[m
+         if (applied) UpdateSelectedElements();[m
+       } catch (e) {[m
+         AddLog('[Ground] Ошибка: ' + e);[m
+[36m@@ -347,7 +374,13 @@[m
+         const el = e.target.closest('[data-help-url]');[m
+         if (!el) return;[m
+         e.preventDefault();[m
+[31m-        const url = el.getAttribute('data-help-url') || 'https://landscape.227.info/help/start';[m
+[32m+[m[32m        let url = el.getAttribute('data-help-url') || 'https://landscape.227.info/help/start';[m
+[32m+[m[41m        [m
+[32m+[m[32m        // Добавляем cache-busting параметр для обхода кеширования браузера[m
+[32m+[m[32m        const separator = url.includes('?') ? '&' : '?';[m
+[32m+[m[32m        const timestamp = Date.now();[m
+[32m+[m[32m        url = url + separator + 'v=' + timestamp;[m
+[32m+[m[41m        [m
+         AddLog('[UI] help → ' + url);[m
+ [m
+         const A = window.ACAPI;[m
+[36m@@ -531,16 +564,36 @@[m
+       <div style="text-align:center; margin-top:15px;">[m
+         <input type="button" [m
+                onclick="CreateMarkup()" [m
+[31m-               value="📏 Разметить"[m
+[32m+[m[32m               value="Разметить"[m
+                style="font-size:16px; padding:8px 20px; font-weight:bold;">[m
+       </div>[m
+ [m
+       <div id="info-markup" class="info-box">[m
+         Создаёт размеры ШИРИНЫ элемента перпендикулярно направлению.<br>[m
+[32m+[m[32m        Размеры расставляются СТРОГО ПО ШАГУ от линии до ближайшей точки контура.<br>[m
+         Линия направления не обязана проходить через элемент - можно задать сбоку (например, вдоль забора).[m
+       </div>[m
+     </fieldset>[m
+ [m
+[32m+[m[32m    <fieldset class="control-block">[m
+[32m+[m[32m      <legend>Проставить размеры до линии</legend>[m
+[32m+[m
+[32m+[m[32m      <div style="text-align:center; margin-bottom:10px;">[m
+[32m+[m[32m        <p style="font-size:12px; color:#666;">[m
+[32m+[m[32m          1. Выделите объекты, колонны или светильники<br>[m
+[32m+[m[32m          2. Нажмите кнопку и кликните <b>2 точки</b> для линии<br>[m
+[32m+[m[32m          3. Размеры появятся перпендикулярно линии от точек привязки[m
+[32m+[m[32m        </p>[m
+[32m+[m[32m      </div>[m
+[32m+[m
+[32m+[m[32m      <div style="text-align:center; margin-top:15px;">[m
+[32m+[m[32m        <input type="button"[m[41m [m
+[32m+[m[32m               onclick="CreateDimensionsToLine()"[m[41m [m
+[32m+[m[32m               value="Проставить размеры"[m
+[32m+[m[32m               style="font-size:16px; padding:8px 20px; font-weight:bold;">[m
+[32m+[m[32m      </div>[m
+[32m+[m[32m    </fieldset>[m
+[32m+[m
+     <button class="tab-help"[m
+             data-help-url="https://landscape.227.info/help/markup?embed=1"[m
+             data-help-title="Справка: Разметка">Помощь</button>[m
+[1mdiff --git a/Src/BrowserRepl.cpp b/Src/BrowserRepl.cpp[m
+[1mindex 07f4f51..abdf1d6 100644[m
+[1m--- a/Src/BrowserRepl.cpp[m
+[1m+++ b/Src/BrowserRepl.cpp[m
+[36m@@ -393,6 +393,11 @@[m [mvoid BrowserRepl::RegisterACAPIJavaScriptObject()[m
+ 		return new JS::Value(MarkupHelper::CreateMarkupDimensions());[m
+ 		}));[m
+ [m
+[32m+[m	[32mjsACAPI->AddItem(new JS::Function("CreateDimensionsToLine", [](GS::Ref<JS::Base>) {[m
+[32m+[m		[32mif (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser("[JS] CreateDimensionsToLine()");[m
+[32m+[m		[32mreturn new JS::Value(MarkupHelper::CreateDimensionsToLine());[m
+[32m+[m		[32m}));[m
+[32m+[m
+ 	// --- Register object in the browser ---[m
+ 	browser.RegisterAsynchJSObject(jsACAPI);[m
+ 	LogToBrowser("[C++] JS bridge registered");[m
+[1mdiff --git a/Src/BuildHelper.cpp b/Src/BuildHelper.cpp[m
+[1mindex 731839e..5bedeea 100644[m
+[1m--- a/Src/BuildHelper.cpp[m
+[1m+++ b/Src/BuildHelper.cpp[m
+[36m@@ -15,9 +15,9 @@[m [mnamespace BuildHelper {[m
+ 	// ---------- Utils ----------[m
+ 	static inline void Log(const GS::UniString& msg)[m
+ 	{[m
+[31m-		if (BrowserRepl::HasInstance())[m
+[31m-			BrowserRepl::GetInstance().LogToBrowser("[Build] " + msg);[m
+[31m-		ACAPI_WriteReport("%s", false, msg.ToCStr().Get());[m
+[32m+[m		[32m// if (BrowserRepl::HasInstance())[m
+[32m+[m		[32m//	BrowserRepl::GetInstance().LogToBrowser("[Build] " + msg);[m
+[32m+[m		[32m// ACAPI_WriteReport("%s", false, msg.ToCStr().Get());[m
+ 	}[m
+ [m
+ 	static inline bool GuidIsValid(const API_Guid& g) { return !(g == APINULLGuid); }[m
+[1mdiff --git a/Src/GDLHelper.cpp b/Src/GDLHelper.cpp[m
+[1mindex 4d7ab24..7d46101 100644[m
+[1m--- a/Src/GDLHelper.cpp[m
+[1m+++ b/Src/GDLHelper.cpp[m
+[36m@@ -24,7 +24,7 @@[m [mnamespace GDLHelper {[m
+ [m
+ 	static void Log(const GS::UniString& s)[m
+ 	{[m
+[31m-		if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser(s);[m
+[32m+[m		[32m// if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser(s);[m
+ 	}[m
+ [m
+ 	static void AppendFormat(GS::UniString& dst, const char* fmt, ...)[m
+[1mdiff --git a/Src/GroundHelper.cpp b/Src/GroundHelper.cpp[m
+[1mindex cd72cfb..e4c722a 100644[m
+[1m--- a/Src/GroundHelper.cpp[m
+[1m+++ b/Src/GroundHelper.cpp[m
+[36m@@ -34,13 +34,13 @@[m [mstatic GS::Array<API_Guid> g_objectGuids;[m
+ // ------------------ Logging ------------------[m
+ static inline void Log(const char* fmt, ...)[m
+ {[m
+[31m-    va_list vl; va_start(vl, fmt);[m
+[31m-    char buf[4096]; vsnprintf(buf, sizeof(buf), fmt, vl);[m
+[31m-    va_end(vl);[m
+[31m-    GS::UniString s(buf);[m
+[31m-    if (BrowserRepl::HasInstance())[m
+[31m-        BrowserRepl::GetInstance().LogToBrowser(s);[m
+[31m-    ACAPI_WriteReport("%s", false, s.ToCStr().Get());[m
+[32m+[m[32m    // va_list vl; va_start(vl, fmt);[m
+[32m+[m[32m    // char buf[4096]; vsnprintf(buf, sizeof(buf), fmt, vl);[m
+[32m+[m[32m    // va_end(vl);[m
+[32m+[m[32m    // GS::UniString s(buf);[m
+[32m+[m[32m    // if (BrowserRepl::HasInstance())[m
+[32m+[m[32m    //     BrowserRepl::GetInstance().LogToBrowser(s);[m
+[32m+[m[32m    // ACAPI_WriteReport("%s", false, s.ToCStr().Get());[m
+ }[m
+ [m
+ // ================================================================[m
+[1mdiff --git a/Src/LandscapeHelper.cpp b/Src/LandscapeHelper.cpp[m
+[1mindex 1a9dad2..bd51462 100644[m
+[1m--- a/Src/LandscapeHelper.cpp[m
+[1m+++ b/Src/LandscapeHelper.cpp[m
+[36m@@ -20,12 +20,12 @@[m [mnamespace LandscapeHelper {[m
+ 	static int       g_count = 1;[m
+ [m
+ 	static inline void LogA(const char* s) {[m
+[31m-		if (BrowserRepl::HasInstance())[m
+[31m-			BrowserRepl::GetInstance().LogToBrowser(GS::UniString(s));[m
+[32m+[m		[32m// if (BrowserRepl::HasInstance())[m
+[32m+[m		[32m//	BrowserRepl::GetInstance().LogToBrowser(GS::UniString(s));[m
+ 	}[m
+ 	static inline void Log(const GS::UniString& s) {[m
+[31m-		if (BrowserRepl::HasInstance())[m
+[31m-			BrowserRepl::GetInstance().LogToBrowser(s);[m
+[32m+[m		[32m// if (BrowserRepl::HasInstance())[m
+[32m+[m		[32m//	BrowserRepl::GetInstance().LogToBrowser(s);[m
+ 	}[m
+ 	static inline double UiStepToMeters(double stepMm) { return stepMm / 1000.0; }[m
+ [m
+[1mdiff --git a/Src/MarkupHelper.cpp b/Src/MarkupHelper.cpp[m
+[1mindex dec269f..a7fb06b 100644[m
+[1m--- a/Src/MarkupHelper.cpp[m
+[1m+++ b/Src/MarkupHelper.cpp[m
+[36m@@ -16,6 +16,11 @@[m
+ [m
+ namespace MarkupHelper {[m
+ [m
+[32m+[m	[32m// ============================================================================[m
+[32m+[m	[32m// Constants[m
+[32m+[m	[32m// ============================================================================[m
+[32m+[m	[32mconstexpr double PI = 3.14159265358979323846;[m
+[32m+[m
+ 	// ============================================================================[m
+ 	// Globals[m
+ 	// ============================================================================[m
+[36m@@ -28,7 +33,7 @@[m [mnamespace MarkupHelper {[m
+ 	{[m
+ 		if (BrowserRepl::HasInstance())[m
+ 			BrowserRepl::GetInstance().LogToBrowser("[Markup] " + msg);[m
+[31m-		ACAPI_WriteReport("[Markup] %s", false, msg.ToCStr().Get());[m
+[32m+[m		[32m// ACAPI_WriteReport("[Markup] %s", false, msg.ToCStr().Get());[m
+ 	}[m
+ [m
+ 	// ============================================================================[m
+[36m@@ -87,399 +92,489 @@[m [mnamespace MarkupHelper {[m
+ 		return true;[m
+ 	}[m
+ [m
+[32m+[m
+ 	// ============================================================================[m
+[31m-	// Аппроксимация дуги (по API_PolyArc)[m
+[32m+[m	[32m// Структура сегмента контура (адаптировано из LandscapeHelper)[m
+ 	// ============================================================================[m
+[31m-	static int FindArcRecord(const API_PolyArc* parcs, Int32 nArcs, Int32 begIndex)[m
+[31m-	{[m
+[31m-		if (parcs == nullptr || nArcs <= 0) return -1;[m
+[31m-		for (Int32 i = 0; i < nArcs; ++i)[m
+[31m-			if (parcs[i].begIndex == begIndex)[m
+[31m-				return (int)i;[m
+[31m-		return -1;[m
+[31m-	}[m
+[32m+[m	[32mstruct ContourSeg {[m
+[32m+[m		[32menum Kind { Line, Arc } kind;[m
+[32m+[m		[32mVec2 a{}, b{};        // Line: начало и конец[m
+[32m+[m		[32mVec2 c{};             // Arc: центр[m
+[32m+[m		[32mdouble r = 0.0;       // Arc: радиус[m
+[32m+[m		[32mdouble a0 = 0.0;      // Arc: начальный угол[m
+[32m+[m		[32mdouble a1 = 0.0;      // Arc: конечный угол[m
+[32m+[m		[32mdouble L = 0.0;       // длина сегмента[m
+[32m+[m	[32m};[m
+ [m
+[31m-	static void AppendArcApprox(const API_Coord& a, const API_Coord& b, double arcAngle,[m
+[31m-		std::vector<Vec2>& out, double segLen = 0.10) // Уменьшил segLen для точности[m
+[31m-	{[m
+[31m-		Vec2 P0(a), P1(b);[m
+[31m-		Vec2 chord = P1 - P0;[m
+[31m-		const double L = chord.length();[m
+[31m-		if (L < 1e-9 || std::fabs(arcAngle) < 1e-6) { out.emplace_back(P1); return; }[m
+[31m-[m
+[31m-		// Более точная формула для радиуса дуги[m
+[31m-		const double half = L * 0.5;[m
+[31m-		const double sinHalf = std::sin(std::fabs(arcAngle) * 0.5);[m
+[31m-		if (sinHalf < 1e-9) { out.emplace_back(P1); return; }[m
+[31m-		[m
+[31m-		const double R = half / sinHalf;[m
+[31m-		const double h = std::sqrt(std::max(R * R - half * half, 0.0));[m
+[31m-[m
+[31m-		Vec2 dir = chord.normalized();[m
+[31m-		Vec2 left = dir.perpendicular();[m
+[31m-		int  sgn = (arcAngle > 0.0) ? 1 : -1;[m
+[31m-		Vec2 C = (P0 + P1) * 0.5 + left * (double)(-sgn) * h;[m
+[31m-[m
+[31m-		double a0 = std::atan2(P0.y - C.y, P0.x - C.x);[m
+[31m-		// Адаптивное количество сегментов в зависимости от угла[m
+[31m-		int N = std::max(8, (int)std::ceil((std::fabs(arcAngle) * R) / segLen));[m
+[31m-		N = std::min(N, 64); // Ограничиваем максимум[m
+[31m-		[m
+[31m-		for (int i = 1; i <= N; ++i) {[m
+[31m-			double ang = a0 + (arcAngle * i) / (double)N;[m
+[31m-			out.emplace_back(Vec2(C.x + R * std::cos(ang), C.y + R * std::sin(ang)));[m
+[31m-		}[m
+[32m+[m	[32m// ============================================================================[m
+[32m+[m	[32m// Нормализация угла к диапазону [0, 2π)[m
+[32m+[m	[32m// ============================================================================[m
+[32m+[m	[32mstatic inline double Norm2PI(double a) {[m
+[32m+[m		[32mconst double twoPi = 2.0 * PI;[m
+[32m+[m		[32mwhile (a < 0.0) a += twoPi;[m
+[32m+[m		[32mwhile (a >= twoPi) a -= twoPi;[m
+[32m+[m		[32mreturn a;[m
+ 	}[m
+ [m
+ 	// ============================================================================[m
+[31m-	// Безопасная попытка «обновить» вид (в некоторых SDK нет этих идентификаторов)[m
+[32m+[m	[32m// Вычисление CCW-дельты между углами (адаптировано из LandscapeHelper)[m
+ 	// ============================================================================[m
+[31m-	static inline void TryRebuildRedraw()[m
+[31m-	{[m
+[31m-#if defined(APIDo_Rebuild) && defined(APIDo_Redraw)[m
+[31m-		ACAPI_Automate(APIDo_Rebuild, nullptr, nullptr);[m
+[31m-		ACAPI_Automate(APIDo_Redraw, nullptr, nullptr);[m
+[31m-#endif[m
+[32m+[m	[32mstatic inline double CCWDelta(double a0, double a1) {[m
+[32m+[m		[32ma0 = Norm2PI(a0);[m
+[32m+[m		[32ma1 = Norm2PI(a1);[m
+[32m+[m		[32mdouble d = a1 - a0;[m
+[32m+[m		[32mif (d < 0.0) d += 2.0 * PI;[m
+[32m+[m		[32mreturn d; // [0, 2π)[m
+ 	}[m
+ [m
+ 	// ============================================================================[m
+[31m-	// ShapePrims → собираем контуры (берём самый большой по площади)[m
+[32m+[m	[32m// Построение контура из memo с правильной обработкой дуг (адаптировано из LandscapeHelper)[m
+ 	// ============================================================================[m
+[31m-	static std::vector<std::vector<Vec2>>* g_shapePolys = nullptr;[m
+[31m-[m
+[31m-	static GSErrCode __ACENV_CALL ShapePrimsCollector(const API_PrimElement* prim,[m
+[31m-		const void* par1, const void* par2, const void* par3)[m
+[32m+[m	[32mstatic void BuildContourFromMemo(std::vector<ContourSeg>& out, API_ElementMemo& memo)[m
+ 	{[m
+[31m-		if (g_shapePolys == nullptr || prim == nullptr) return NoError;[m
+[31m-[m
+[31m-		if (prim->header.typeID == API_PrimPolyID) {[m
+[31m-			const API_PrimPoly& info = prim->poly;[m
+[31m-			const API_Coord* coords = reinterpret_cast<const API_Coord*>    (par1);[m
+[31m-			const Int32* pends = reinterpret_cast<const Int32*>        (par2);[m
+[31m-			const API_PolyArc* parcs = reinterpret_cast<const API_PolyArc*>  (par3);[m
+[31m-[m
+[31m-			if (coords == nullptr
