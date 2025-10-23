@@ -23,7 +23,6 @@
     .tab-help { position:absolute; right:10px; bottom:10px; padding:8px 12px; border:0; border-radius:8px; background:#366536; color:#fff; font-weight:600; cursor:pointer; box-shadow:0 6px 18px rgba(0,0,0,.2); }
     .tab-help:hover { filter:brightness(1.05); }
     .tab-help:active { transform:translateY(1px); }
-    #log-box { margin-top:10px; padding:8px; background:#111; color:#0f0; font-family:monospace; font-size:12px; height:140px; overflow:auto; }
     .muted { opacity:.6; }
   </style>
 
@@ -32,11 +31,7 @@
 
     // ================= helpers =================
     function AddLog(msg) {
-      const box = document.getElementById('log-box');
-      if (!box) return;
-      const now = new Date().toLocaleTimeString();
-      box.textContent += "\n[" + now + "] " + msg;
-      box.scrollTop = box.scrollHeight;
+      // Логи отключены в релизной версии
     }
     function setInfo(id, msg) {
       const el = document.getElementById(id);
@@ -458,13 +453,17 @@
   </table>
 
   <!-- Форма изменения ID -->
-  <fieldset class="control-block" style="margin-bottom: 20px;">
+  <fieldset class="control-block" style="margin-bottom: 20px; position: relative; padding-bottom: 50px;">
     <legend>Изменение ID элементов</legend>
     <label for="baseID">Базовое название:</label>
     <input type="text" id="baseID" placeholder="Например: Сосна обыкновенная" style="width: 200px; padding: 3px; margin: 3px 0;" />
     <br>
     <input type="button" value="Изменить ID всех выбранных элементов" onclick="changeAllSelectedIDs()" style="margin-top: 10px;" />
     <div class="info-box" id="id-change-info">Введите базовое название и нажмите кнопку. Все выбранные элементы получат ID с порядковыми номерами (например: Сосна обыкновенная-01, Сосна обыкновенная-02...)</div>
+    
+    <button class="tab-help"
+            data-help-url="https://landscape.227.info/help/selection"
+            data-help-title="Справка: Выбор элементов">Помощь</button>
   </fieldset>
 
   <!-- Вкладки -->
@@ -661,7 +660,6 @@
             data-help-title="Справка: GDL">Помощь</button>
   </div>
 
-  <div id="log-box">[Лог плагина будет здесь]</div>
 
   <a href="#"
      data-help-url="https://landscape.227.info/?embed=1"
