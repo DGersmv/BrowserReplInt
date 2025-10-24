@@ -34,13 +34,13 @@ static GS::Array<API_Guid> g_objectGuids;
 // ------------------ Logging ------------------
 static inline void Log(const char* fmt, ...)
 {
-    // va_list vl; va_start(vl, fmt);
-    // char buf[4096]; vsnprintf(buf, sizeof(buf), fmt, vl);
-    // va_end(vl);
-    // GS::UniString s(buf);
-    // if (BrowserRepl::HasInstance())
-    //     BrowserRepl::GetInstance().LogToBrowser(s);
-    // ACAPI_WriteReport("%s", false, s.ToCStr().Get());
+    va_list vl; va_start(vl, fmt);
+    char buf[4096]; vsnprintf(buf, sizeof(buf), fmt, vl);
+    va_end(vl);
+    GS::UniString s(buf);
+    if (BrowserRepl::HasInstance())
+        BrowserRepl::GetInstance().LogToBrowser(s);
+    ACAPI_WriteReport("%s", false, s.ToCStr().Get());
 }
 
 // ================================================================

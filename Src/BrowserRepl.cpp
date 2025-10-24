@@ -11,6 +11,7 @@
 #include "BuildHelper.hpp"
 #include "GDLHelper.hpp"
 #include "MarkupHelper.hpp"
+#include "ShellHelper.hpp"
 #include "HelpPalette.hpp"
 
 
@@ -403,6 +404,57 @@ void BrowserRepl::RegisterACAPIJavaScriptObject()
 	jsACAPI->AddItem(new JS::Function("CreateDimensionsToLine", [](GS::Ref<JS::Base>) {
 		if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser("[JS] CreateDimensionsToLine()");
 		return new JS::Value(MarkupHelper::CreateDimensionsToLine());
+		}));
+
+	// --- Shell API (выбор базовой линии) ---
+	jsACAPI->AddItem(new JS::Function("SetBaseLineForShell", [](GS::Ref<JS::Base>) {
+		if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser("[JS] SetBaseLineForShell()");
+		
+		const bool success = ShellHelper::SetBaseLineForShell();
+		return new JS::Value(success);
+		}));
+
+	// --- Shell API (создание оболочки по линии) ---
+	jsACAPI->AddItem(new JS::Function("CreateShellFromLine", [](GS::Ref<JS::Base> param) {
+		// Парсим параметры: принимаем строку "width:..,step:.." или просто число
+		double width = 1000.0; // мм по умолчанию
+		double step = 500.0;   // мм по умолчанию
+		
+		if (param != nullptr) {
+			if (GS::Ref<JS::Value> v = GS::DynamicCast<JS::Value>(param)) {
+				switch (v->GetType()) {
+				case JS::Value::DOUBLE:
+				case JS::Value::INTEGER: 
+					width = v->GetDouble(); 
+					break;
+				case JS::Value::STRING: {
+					GS::UniString s = v->GetString();
+					for (UIndex i = 0; i < s.GetLength(); ++i) if (s[i] == ',') s[i] = '.';
+					const char* c = s.ToCStr().Get();
+					if (std::strncmp(c, "width:", 6) == 0) { 
+						std::sscanf(c + 6, "%lf", &width); 
+					}
+					if (std::strstr(c, "step:") != nullptr) {
+						const char* stepStart = std::strstr(c, "step:");
+						if (stepStart != nullptr) {
+							std::sscanf(stepStart + 5, "%lf", &step);
+						}
+					}
+					break;
+				}
+				default: break;
+				}
+			}
+		}
+		
+		if (BrowserRepl::HasInstance()) {
+			BrowserRepl::GetInstance().LogToBrowser(GS::UniString::Printf("[JS] CreateShellFromLine parsed: width=%.1fmm, step=%.1fmm", width, step));
+		}
+		
+		ACAPI_WriteReport("[BrowserRepl] Вызов ShellHelper::CreateShellFromLine", false);
+		const bool success = ShellHelper::CreateShellFromLine(width, step);
+		ACAPI_WriteReport("[BrowserRepl] ShellHelper::CreateShellFromLine вернул: %s", false, success ? "true" : "false");
+		return new JS::Value(success);
 		}));
 
 	// --- Register object in the browser ---

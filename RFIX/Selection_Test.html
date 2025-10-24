@@ -201,6 +201,75 @@
       if (ACAPI?.CreateShellAlongCurve) ACAPI.CreateShellAlongCurve(w);
       setInfo("info-build","Оболочка, ширина=" + w);
     }
+
+    // ================= ОБОЛОЧКА =================
+    function SelectBaseLine() {
+      const A = window.ACAPI;
+      if (!A) { AddLog('[Shell] ACAPI недоступен'); return; }
+      if (!A.SetBaseLineForShell) {
+        AddLog('[Shell] API функция SetBaseLineForShell недоступна');
+        setInfo('info-shell', ' Функция недоступна (обновите плагин)');
+        return;
+      }
+
+      AddLog('[Shell] Выбор базовой линии...');
+      setInfo('info-shell', 'Выберите базовую линию (spline/polyline/дуга/линия)...');
+
+      // Вызываем функцию выбора линии
+      Promise.resolve(A.SetBaseLineForShell()).then(success => {
+        if (success) {
+          setInfo('info-shell', ' ✅ Базовая линия выбрана!');
+          AddLog('[Shell] Базовая линия выбрана');
+        } else {
+          setInfo('info-shell', ' ❌ Не удалось выбрать линию');
+          AddLog('[Shell] Ошибка выбора линии');
+        }
+      }).catch(e => {
+        AddLog('[Shell] Ошибка: ' + e);
+        setInfo('info-shell', ' ❌ Ошибка: ' + e);
+      });
+    }
+
+    function CreateShellFromLine() {
+      const A = window.ACAPI;
+      if (!A) { AddLog('[Shell] ACAPI недоступен'); return; }
+      if (!A.CreateShellFromLine) {
+        AddLog('[Shell] API функция недоступна');
+        setInfo('info-shell', ' Функция недоступна (обновите плагин)');
+        return;
+      }
+
+      const width = parseNumber(document.getElementById('shellWidth'), 1000);
+      const step = parseNumber(document.getElementById('shellStep'), 500);
+      
+      if (width <= 0) {
+        setInfo('info-shell', 'Ширина должна быть > 0');
+        return;
+      }
+      if (step <= 0) {
+        setInfo('info-shell', 'Шаг должен быть > 0');
+        return;
+      }
+
+      AddLog('[Shell] Создание оболочки: ширина=' + width + 'мм, шаг=' + step + 'мм');
+      setInfo('info-shell', 'Создание оболочки...');
+
+      // Вызываем функцию создания оболочки (передаем параметры через строку)
+      const params = "width:" + width + ",step:" + step;
+      AddLog('[Shell] Вызов ACAPI.CreateShellFromLine с параметрами: ' + params);
+      Promise.resolve(A.CreateShellFromLine(params)).then(success => {
+        if (success) {
+          setInfo('info-shell', ' ✅ Оболочка создана!');
+          AddLog('[Shell] SUCCESS');
+        } else {
+          setInfo('info-shell', ' ❌ Не удалось создать оболочку');
+          AddLog('[Shell] FAILED');
+        }
+      }).catch(e => {
+        AddLog('[Shell] Ошибка: ' + e);
+        setInfo('info-shell', ' ❌ Ошибка: ' + e);
+      });
+    }
     function GenerateGDLFromSelection() {
       if (!ACAPI?.GenerateGDLFromSelection) { AddLog('[UI] ACAPI.GenerateGDLFromSelection недоступен'); return; }
       ACAPI.GenerateGDLFromSelection().then(code => {
@@ -401,6 +470,12 @@
       const offset = document.getElementById('groundOffset');
       offset?.addEventListener('keydown', e => { if (e.key === 'Enter') whenACAPIReadyDo(ApplyZDeltaUI); });
 
+      // Enter для полей оболочки
+      const shellWidth = document.getElementById('shellWidth');
+      const shellStep = document.getElementById('shellStep');
+      shellWidth?.addEventListener('keydown', e => { if (e.key === 'Enter') CreateShellFromLine(); });
+      shellStep?.addEventListener('keydown', e => { if (e.key === 'Enter') CreateShellFromLine(); });
+
       // Делегирование кликов по любым элементам с data-help-url
       document.addEventListener('click', function (e) {
         const el = e.target.closest('[data-help-url]');
@@ -473,6 +548,7 @@
     <button class="tablink" onclick="openTab(event,'tab-orient')">Ориентация</button>
     <button class="tablink" onclick="openTab(event,'tab-ground')">Приземление</button>
     <button class="tablink" onclick="openTab(event,'tab-markup')">Разметка</button>
+    <button class="tablink" onclick="openTab(event,'tab-shell')">Оболочка</button>
     <button class="tablink" onclick="openTab(event,'tab-gdl')">GDL</button>
   </div>
 
@@ -643,6 +719,55 @@
     <button class="tab-help"
             data-help-url="https://landscape.227.info/help/dimensions"
             data-help-title="Справка: Разметка">Помощь</button>
+  </div>
+
+  <!-- Оболочка -->
+  <div id="tab-shell" class="tabcontent">
+    <fieldset class="control-block">
+      <legend>Создание оболочки по линии</legend>
+
+      <div style="text-align:center; margin-bottom:10px;">
+        <p style="font-size:12px; color:#666;">
+          1. Нажмите "Выбрать линию" и выберите базовую линию<br>
+          2. Задайте ширину и шаг<br>
+          3. Нажмите кнопку для создания оболочки
+        </p>
+      </div>
+
+      <div style="text-align:center; margin-bottom:10px;">
+        <input type="button" 
+               onclick="SelectBaseLine()" 
+               value="Выбрать линию"
+               style="font-size:14px; padding:6px 15px; font-weight:bold;">
+      </div>
+
+      <div>
+        <label>Ширина (мм):</label>
+        <input type="number" id="shellWidth" step="1" value="1000">
+      </div>
+
+      <div>
+        <label>Шаг (мм):</label>
+        <input type="number" id="shellStep" step="1" value="500">
+      </div>
+
+      <div style="text-align:center; margin-top:15px;">
+        <input type="button" 
+               onclick="CreateShellFromLine()" 
+               value="Создать оболочку"
+               style="font-size:16px; padding:8px 20px; font-weight:bold;">
+      </div>
+
+      <div id="info-shell" class="info-box">
+        Создаёт оболочку по базовой линии с заданными параметрами.<br>
+        Перпендикулярные линии проецируются на 3D сетку и соединяются в оболочку.<br>
+        <strong>Внимание:</strong> Перпендикулярные линии всегда параллельны плоскости XY.
+      </div>
+    </fieldset>
+
+    <button class="tab-help"
+            data-help-url="https://landscape.227.info/help/shell"
+            data-help-title="Справка: Оболочка">Помощь</button>
   </div>
 
   <!-- GDL -->
