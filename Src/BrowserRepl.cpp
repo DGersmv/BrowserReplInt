@@ -414,6 +414,13 @@ void BrowserRepl::RegisterACAPIJavaScriptObject()
 		return new JS::Value(success);
 		}));
 
+	jsACAPI->AddItem(new JS::Function("SetMeshSurfaceForShell", [](GS::Ref<JS::Base>) {
+		if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser("[JS] SetMeshSurfaceForShell()");
+		
+		const bool success = ShellHelper::SetMeshSurfaceForShell();
+		return new JS::Value(success);
+		}));
+
 	// --- Shell API (создание оболочки по линии) ---
 	jsACAPI->AddItem(new JS::Function("CreateShellFromLine", [](GS::Ref<JS::Base> param) {
 		// Парсим параметры: принимаем строку "width:..,step:.." или просто число
