@@ -223,16 +223,10 @@ void BrowserRepl::RegisterACAPIJavaScriptObject()
 		return ConvertToJavaScriptVariable(true);
 		}));
 
-	// --- Selection API ---
-	// --- Selection API ---
-
-
-
 	jsACAPI->AddItem(new JS::Function("ChangeSelectedElementsID", [](GS::Ref<JS::Base> param) {
 		const GS::UniString baseID = GetStringFromJavaScriptVariable(param);
-		if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser("[JS] ChangeSelectedElementsID baseID=" + baseID);
-		
-		bool success = SelectionHelper::ChangeSelectedElementsID(baseID);
+		if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser("[JS] ChangeSelectedElementsID " + baseID);
+		const bool success = SelectionHelper::ChangeSelectedElementsID(baseID);
 		return ConvertToJavaScriptVariable(success);
 		}));
 
