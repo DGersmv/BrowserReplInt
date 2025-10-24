@@ -652,229 +652,260 @@ bool Create3DShellFromPath(const PathData& path, double widthMM, double stepMM)
         return false;
     }
     
-    // Создаем 3D точки с заданным шагом
+    // Используем логику из LandscapeHelper для получения точек по шагу
     double step = stepMM / 1000.0; // шаг в метрах
+    
+    // Генерируем позиции точек по шагу (как в DistributeOnSinglePath)
+    GS::Array<double> sVals;
+    for (double s = 0.0; s <= path.total + 1e-9; s += step) {
+        sVals.Push(std::min(s, path.total));
+    }
+    
+    Log("[ShellHelper] Сгенерировано %d точек по шагу %.3fм", (int)sVals.GetSize(), step);
+    
     GS::Array<API_Coord3D> leftPoints;
     GS::Array<API_Coord3D> rightPoints;
     
-    // ВСЕГДА добавляем первую точку (позиция 0.0)
-    bool firstPointAdded = false;
-    bool lastPointAdded = false;
-    
-    double currentPos = 0.0;
-    while (currentPos <= path.total) {
-        // Получаем точку на базовой линии
+    // Обрабатываем каждую точку
+    for (UIndex i = 0; i < sVals.GetSize(); ++i) {
+        double s = sVals[i];
+        // Получаем точку и угол используя логику из LandscapeHelper
         API_Coord pointOnPath;
         double tangentAngle = 0.0;
         
-        // Находим нужный сегмент и позицию в нем
-        double accumulatedLength = 0.0;
+        // Используем EvalOnPath логику для получения точки и угла
+        double acc = 0.0;
         bool found = false;
-        
-        for (UIndex i = 0; i < path.segs.GetSize() && !found; ++i) {
-            const Seg& seg = path.segs[i];
+        for (UIndex j = 0; j < path.segs.GetSize() && !found; ++j) {
+            const Seg& seg = path.segs[j];
             
-            if (currentPos <= accumulatedLength + seg.len) {
-                // Текущая позиция находится в этом сегменте
-                double localPos = currentPos - accumulatedLength;
-                
-                // Вычисляем точку и угол в зависимости от типа сегмента
-                switch (seg.type) {
-                    case SegType::Line: {
-                        double t = (seg.len > 1e-9) ? localPos / seg.len : 0.0;
-                        pointOnPath.x = seg.A.x + t * (seg.B.x - seg.A.x);
-                        pointOnPath.y = seg.A.y + t * (seg.B.y - seg.A.y);
-                        tangentAngle = std::atan2(seg.B.y - seg.A.y, seg.B.x - seg.A.x);
-                        break;
-                    }
-                    case SegType::Arc: {
-                        double t = (seg.len > 1e-9) ? localPos / seg.len : 0.0;
-                        double angle = seg.a0 + t * (seg.a1 - seg.a0);
-                        pointOnPath.x = seg.C.x + seg.r * std::cos(angle);
-                        pointOnPath.y = seg.C.y + seg.r * std::sin(angle);
-                        tangentAngle = angle + ((seg.a1 > seg.a0) ? kPI / 2.0 : -kPI / 2.0);
-                        break;
-                    }
-                    default:
-                        // Для сплайнов пока используем линейную интерполяцию
-                        double t = (seg.len > 1e-9) ? localPos / seg.len : 0.0;
-                        pointOnPath.x = seg.A.x + t * (seg.B.x - seg.A.x);
-                        pointOnPath.y = seg.A.y + t * (seg.B.y - seg.A.y);
-                        tangentAngle = std::atan2(seg.B.y - seg.A.y, seg.B.x - seg.A.x);
-                        break;
-                }
-                found = true;
+            if (s > acc + seg.len) { 
+                acc += seg.len; 
+                continue; 
             }
-            accumulatedLength += seg.len;
+            const double f = (seg.len < 1e-9) ? 0.0 : (s - acc) / seg.len;
+
+            if (seg.type == SegType::Line) {
+                pointOnPath.x = seg.A.x + f * (seg.B.x - seg.A.x);
+                pointOnPath.y = seg.A.y + f * (seg.B.y - seg.A.y);
+                tangentAngle = std::atan2(seg.B.y - seg.A.y, seg.B.x - seg.A.x);
+            } else if (seg.type == SegType::Arc) {
+                const double sweep = seg.a1 - seg.a0;
+                const double ang = seg.a0 + f * sweep;
+                pointOnPath.x = seg.C.x + seg.r * std::cos(ang);
+                pointOnPath.y = seg.C.y + seg.r * std::sin(ang);
+                tangentAngle = ang + ((sweep >= 0.0) ? kPI / 2.0 : -kPI / 2.0);
+            } else {
+                // Для сплайнов используем линейную интерполяцию
+                pointOnPath.x = seg.A.x + f * (seg.B.x - seg.A.x);
+                pointOnPath.y = seg.A.y + f * (seg.B.y - seg.A.y);
+                tangentAngle = std::atan2(seg.B.y - seg.A.y, seg.B.x - seg.A.x);
+            }
+            found = true;
         }
         
         if (!found) {
             // Если не нашли сегмент, используем последнюю точку
-            const Seg& lastSeg = path.segs[path.segs.GetSize() - 1];
-            pointOnPath.x = lastSeg.B.x;
-            pointOnPath.y = lastSeg.B.y;
-            tangentAngle = std::atan2(lastSeg.B.y - lastSeg.A.y, lastSeg.B.x - lastSeg.A.x);
+            const Seg& seg = path.segs[path.segs.GetSize() - 1];
+            if (seg.type == SegType::Line) {
+                pointOnPath = seg.B;
+                tangentAngle = std::atan2(seg.B.y - seg.A.y, seg.B.x - seg.A.x);
+            } else {
+                const double sweep = seg.a1 - seg.a0;
+                pointOnPath.x = seg.C.x + seg.r * std::cos(seg.a1);
+                pointOnPath.y = seg.C.y + seg.r * std::sin(seg.a1);
+                tangentAngle = seg.a1 + ((sweep >= 0.0) ? kPI / 2.0 : -kPI / 2.0);
+            }
         }
         
-        // Вычисляем перпендикулярное направление для каждой конкретной точки
+        // Шаг 2: Строим перпендикуляры от каждой точки
         double perpAngle = tangentAngle + kPI / 2.0;
         double perpX = std::cos(perpAngle);
         double perpY = std::sin(perpAngle);
         
-        // Логируем угол для отладки
-        if (leftPoints.GetSize() <= 5 || leftPoints.GetSize() % 5 == 0) {
-            Log("[ShellHelper] Точка %d: позиция=(%.3f, %.3f), угол касательной=%.3f°, перпендикуляр=%.3f°", 
-                (int)leftPoints.GetSize() + 1, pointOnPath.x, pointOnPath.y, 
-                tangentAngle * 180.0 / kPI, perpAngle * 180.0 / kPI);
-        }
-        
         double halfWidth = widthMM / 2000.0; // Переводим мм в метры и делим пополам
         
-        // Создаем левую и правую точки
+        // Создаем левую и правую точки на перпендикуляре
         API_Coord3D leftPoint = {pointOnPath.x + perpX * halfWidth, pointOnPath.y + perpY * halfWidth, 0.0};
         API_Coord3D rightPoint = {pointOnPath.x - perpX * halfWidth, pointOnPath.y - perpY * halfWidth, 0.0};
         
-        // Получаем Z-координаты от Mesh
-        // ОПТИМИЗАЦИЯ: получаем Z только один раз в начале линии
-        static double cachedZ = 0.0;
-        static bool zCached = false;
+        // Шаг 3: Получаем Z-координаты от Mesh для каждой точки
+        double leftZ = 0.0, rightZ = 0.0;
+        API_Vector3D leftNormal = {}, rightNormal = {};
         
-        if (!zCached) {
-            // Получаем Z-координату только для первой точки
-            double z = 0.0;
-            API_Vector3D normal = {};
-            
-            if (GroundHelper::GetGroundZAndNormal(leftPoint, z, normal)) {
-                cachedZ = z;
-                zCached = true;
-                Log("[ShellHelper] Z-координата получена и кэширована: %.3f", cachedZ);
-            } else {
-                Log("[ShellHelper] WARNING: Не удалось получить Z от Mesh");
-                cachedZ = 0.0;
-                zCached = true;
-            }
+        if (GroundHelper::GetGroundZAndNormal(leftPoint, leftZ, leftNormal)) {
+            leftPoint.z = leftZ;
+        } else {
+            Log("[ShellHelper] WARNING: Не удалось получить Z для левой точки");
+            leftPoint.z = 0.0;
         }
         
-        // Используем кэшированную Z-координату для обеих точек
-        leftPoint.z = cachedZ;
-        rightPoint.z = cachedZ;
+        if (GroundHelper::GetGroundZAndNormal(rightPoint, rightZ, rightNormal)) {
+            rightPoint.z = rightZ;
+        } else {
+            Log("[ShellHelper] WARNING: Не удалось получить Z для правой точки");
+            rightPoint.z = 0.0;
+        }
         
         leftPoints.Push(leftPoint);
         rightPoints.Push(rightPoint);
         
         // Логируем первые и последние точки для отладки
-        if (leftPoints.GetSize() <= 5 || leftPoints.GetSize() % 10 == 0) {
+        if (i < 5 || i >= sVals.GetSize() - 5) {
             Log("[ShellHelper] Точка %d: left(%.3f, %.3f, %.3f), right(%.3f, %.3f, %.3f)", 
-                (int)leftPoints.GetSize(), leftPoint.x, leftPoint.y, leftPoint.z, rightPoint.x, rightPoint.y, rightPoint.z);
+                (int)i + 1, leftPoint.x, leftPoint.y, leftPoint.z, rightPoint.x, rightPoint.y, rightPoint.z);
         }
-        
-        currentPos += step;
-    }
-    
-    // ВСЕГДА добавляем последнюю точку (позиция path.total), если она еще не добавлена
-    if (!lastPointAdded) {
-        // Получаем последнюю точку базовой линии
-        API_Coord pointOnPath;
-        double tangentAngle = 0.0;
-        
-        // Находим последний сегмент
-        const Seg& lastSeg = path.segs[path.segs.GetSize() - 1];
-        if (lastSeg.type == SegType::Line) {
-            pointOnPath = lastSeg.B;
-            tangentAngle = std::atan2(lastSeg.B.y - lastSeg.A.y, lastSeg.B.x - lastSeg.A.x);
-        } else {
-            // Arc
-            pointOnPath.x = lastSeg.C.x + lastSeg.r * std::cos(lastSeg.a1);
-            pointOnPath.y = lastSeg.C.y + lastSeg.r * std::sin(lastSeg.a1);
-            tangentAngle = lastSeg.a1 + ((lastSeg.a1 - lastSeg.a0 >= 0.0) ? kPI / 2.0 : -kPI / 2.0);
-        }
-        
-        // Вычисляем перпендикулярное направление для последней точки
-        double perpAngle = tangentAngle + kPI / 2.0;
-        double perpX = std::cos(perpAngle);
-        double perpY = std::sin(perpAngle);
-        
-        double halfWidth = widthMM / 2000.0;
-        
-        // Создаем левую и правую точки для последней точки
-        API_Coord3D leftPoint = {pointOnPath.x + perpX * halfWidth, pointOnPath.y + perpY * halfWidth, 0.0};
-        API_Coord3D rightPoint = {pointOnPath.x - perpX * halfWidth, pointOnPath.y - perpY * halfWidth, 0.0};
-        
-        // Используем кэшированную Z-координату (получаем из статической переменной)
-        static double cachedZ = 0.0;
-        static bool zCached = false;
-        
-        if (!zCached) {
-            // Получаем Z-координату только для первой точки
-            double z = 0.0;
-            API_Vector3D normal = {};
-            
-            if (GroundHelper::GetGroundZAndNormal(leftPoint, z, normal)) {
-                cachedZ = z;
-                zCached = true;
-                Log("[ShellHelper] Z-координата получена и кэширована: %.3f", cachedZ);
-            } else {
-                Log("[ShellHelper] WARNING: Не удалось получить Z от Mesh");
-                cachedZ = 0.0;
-                zCached = true;
-            }
-        }
-        
-        leftPoint.z = cachedZ;
-        rightPoint.z = cachedZ;
-        
-        leftPoints.Push(leftPoint);
-        rightPoints.Push(rightPoint);
-        
-        Log("[ShellHelper] Последняя точка добавлена: left(%.3f, %.3f, %.3f), right(%.3f, %.3f, %.3f)", 
-            leftPoint.x, leftPoint.y, leftPoint.z, rightPoint.x, rightPoint.y, rightPoint.z);
     }
     
     Log("[ShellHelper] Создано %d пар точек для 3D оболочки", (int)leftPoints.GetSize());
     
-    // Создаем одну плавную Shell поверхность, которая огибает Mesh
-    // Объединяем левые и правые точки в один контур для создания плавной поверхности
-    GS::Array<API_Coord3D> allPoints;
+    // Шаг 4: Создаем 2 НЕ замкнутые Spline по найденным точкам
+    Log("[ShellHelper] Создаем два НЕ замкнутых Spline из %d точек", (int)leftPoints.GetSize() * 2);
     
-    // Добавляем точки по периметру: левая сторона -> правая сторона (в обратном порядке)
+    // Создаем левый Spline из левых точек
+    GS::Array<API_Coord> leftSplinePoints;
     for (UIndex i = 0; i < leftPoints.GetSize(); ++i) {
-        allPoints.Push(leftPoints[i]);
-    }
-    for (Int32 i = (Int32)rightPoints.GetSize() - 1; i >= 0; --i) {
-        allPoints.Push(rightPoints[i]);
+        leftSplinePoints.Push({leftPoints[i].x, leftPoints[i].y});
     }
     
-            Log("[ShellHelper] Создаем замкнутый контур из %d точек", (int)allPoints.GetSize());
-            
-            // Создаем замкнутый контур: левые точки + правые точки в обратном порядке
-            GS::Array<API_Coord> closedContourPoints;
-            
-            // Добавляем левые точки от начала до конца
-            for (UIndex i = 0; i < leftPoints.GetSize(); ++i) {
-                closedContourPoints.Push({leftPoints[i].x, leftPoints[i].y});
+    Log("[ShellHelper] Левый Spline: %d точек", (int)leftSplinePoints.GetSize());
+    if (leftSplinePoints.GetSize() > 0) {
+        Log("[ShellHelper] Левый Spline: первая точка (%.3f, %.3f), последняя (%.3f, %.3f)", 
+            leftSplinePoints[0].x, leftSplinePoints[0].y,
+            leftSplinePoints[leftSplinePoints.GetSize()-1].x, leftSplinePoints[leftSplinePoints.GetSize()-1].y);
+    }
+    
+    API_Guid leftSplineGuid = CreateSplineFromPoints(leftSplinePoints);
+    if (leftSplineGuid == APINULLGuid) {
+        Log("[ShellHelper] ERROR: Не удалось создать левый Spline");
+        return false;
+    }
+    
+    // Создаем правый Spline из правых точек
+    GS::Array<API_Coord> rightSplinePoints;
+    for (UIndex i = 0; i < rightPoints.GetSize(); ++i) {
+        rightSplinePoints.Push({rightPoints[i].x, rightPoints[i].y});
+    }
+    
+    Log("[ShellHelper] Правый Spline: %d точек", (int)rightSplinePoints.GetSize());
+    if (rightSplinePoints.GetSize() > 0) {
+        Log("[ShellHelper] Правый Spline: первая точка (%.3f, %.3f), последняя (%.3f, %.3f)", 
+            rightSplinePoints[0].x, rightSplinePoints[0].y,
+            rightSplinePoints[rightSplinePoints.GetSize()-1].x, rightSplinePoints[rightSplinePoints.GetSize()-1].y);
+    }
+    
+    API_Guid rightSplineGuid = CreateSplineFromPoints(rightSplinePoints);
+    if (rightSplineGuid == APINULLGuid) {
+        Log("[ShellHelper] ERROR: Не удалось создать правый Spline");
+        return false;
+    }
+    
+    Log("[ShellHelper] SUCCESS: Созданы два НЕ замкнутых Spline (левый и правый)");
+    
+    // Шаг 5: Замыкаем крайние точки обоих Spline простыми линиями
+    Log("[ShellHelper] Замыкаем крайние точки обоих Spline простыми линиями");
+    
+    // Создаем линию между первыми точками (начало)
+    API_Element startLine = {};
+    startLine.header.type = API_LineID;
+    GSErrCode err = ACAPI_Element_GetDefaults(&startLine, nullptr);
+    if (err == NoError) {
+        startLine.line.begC = leftSplinePoints[0];
+        startLine.line.endC = rightSplinePoints[0];
+        
+        err = ACAPI_CallUndoableCommand("Create Start Line", [&]() -> GSErrCode {
+            return ACAPI_Element_Create(&startLine, nullptr);
+        });
+        
+        if (err == NoError) {
+            Log("[ShellHelper] SUCCESS: Создана линия между первыми точками");
+        } else {
+            Log("[ShellHelper] ERROR: Не удалось создать линию между первыми точками, err=%d", (int)err);
+        }
+    }
+    
+    // Создаем линию между последними точками (конец)
+    API_Element endLine = {};
+    endLine.header.type = API_LineID;
+    err = ACAPI_Element_GetDefaults(&endLine, nullptr);
+    if (err == NoError) {
+        endLine.line.begC = leftSplinePoints[leftSplinePoints.GetSize() - 1];
+        endLine.line.endC = rightSplinePoints[rightSplinePoints.GetSize() - 1];
+        
+        err = ACAPI_CallUndoableCommand("Create End Line", [&]() -> GSErrCode {
+            return ACAPI_Element_Create(&endLine, nullptr);
+        });
+        
+        if (err == NoError) {
+            Log("[ShellHelper] SUCCESS: Создана линия между последними точками");
+        } else {
+            Log("[ShellHelper] ERROR: Не удалось создать линию между последними точками, err=%d", (int)err);
+        }
+    }
+    
+    Log("[ShellHelper] SUCCESS: Замыкающие линии созданы");
+    
+    // Шаг 6: Создаем MESH по полученному контуру с точками
+    Log("[ShellHelper] Создаем MESH по полученному контуру с точками");
+    
+    // Создаем замкнутый контур для MESH: левые точки + правые точки в обратном порядке
+    GS::Array<API_Coord> meshContourPoints;
+    
+    // Добавляем левые точки от начала до конца
+    for (UIndex i = 0; i < leftPoints.GetSize(); ++i) {
+        meshContourPoints.Push({leftPoints[i].x, leftPoints[i].y});
+    }
+    
+    // Добавляем правые точки от конца до начала (в обратном порядке)
+    for (Int32 i = rightPoints.GetSize() - 1; i >= 0; --i) {
+        meshContourPoints.Push({rightPoints[i].x, rightPoints[i].y});
+    }
+    
+    Log("[ShellHelper] MESH контур: %d точек", (int)meshContourPoints.GetSize());
+    
+    // Создаем MESH элемент
+    API_Element mesh = {};
+    mesh.header.type = API_MeshID;
+    err = ACAPI_Element_GetDefaults(&mesh, nullptr);
+    if (err == NoError) {
+        // Настраиваем MESH
+        mesh.mesh.poly.nCoords = (Int32)meshContourPoints.GetSize();
+        mesh.mesh.poly.nSubPolys = 1;
+        mesh.mesh.poly.nArcs = 0;
+        
+        // Создаем memo для MESH
+        API_ElementMemo meshMemo = {};
+        BNZeroMemory(&meshMemo, sizeof(API_ElementMemo));
+        
+        // Выделяем память для координат
+        meshMemo.coords = reinterpret_cast<API_Coord**>(BMAllocateHandle((meshContourPoints.GetSize() + 1) * sizeof(API_Coord), ALLOCATE_CLEAR, 0));
+        if (meshMemo.coords != nullptr) {
+            // Заполняем координаты (1-based indexing)
+            for (UIndex i = 0; i < meshContourPoints.GetSize(); ++i) {
+                (*meshMemo.coords)[i + 1] = meshContourPoints[i];
             }
             
-            // Добавляем правые точки от конца до начала (в обратном порядке)
-            for (Int32 i = rightPoints.GetSize() - 1; i >= 0; --i) {
-                closedContourPoints.Push({rightPoints[i].x, rightPoints[i].y});
+            // Создаем MESH внутри Undo-команды
+            err = ACAPI_CallUndoableCommand("Create Mesh", [&]() -> GSErrCode {
+                return ACAPI_Element_Create(&mesh, &meshMemo);
+            });
+            
+            if (err == NoError) {
+                Log("[ShellHelper] SUCCESS: MESH создан с %d точками", (int)meshContourPoints.GetSize());
+            } else {
+                Log("[ShellHelper] ERROR: Не удалось создать MESH, err=%d", (int)err);
             }
             
-            Log("[ShellHelper] Замкнутый контур: %d точек", (int)closedContourPoints.GetSize());
-            if (closedContourPoints.GetSize() > 0) {
-                Log("[ShellHelper] Первая точка (%.3f, %.3f), последняя (%.3f, %.3f)", 
-                    closedContourPoints[0].x, closedContourPoints[0].y,
-                    closedContourPoints[closedContourPoints.GetSize()-1].x, closedContourPoints[closedContourPoints.GetSize()-1].y);
-            }
-            
-            // Создаем один замкнутый Spline
-            API_Guid closedSplineGuid = CreateSplineFromPoints(closedContourPoints);
-            if (closedSplineGuid == APINULLGuid) {
-                Log("[ShellHelper] ERROR: Не удалось создать замкнутый Spline");
-                return false;
-            }
-            
-            Log("[ShellHelper] SUCCESS: Создан замкнутый Spline контур");
-            return true;
+            ACAPI_DisposeElemMemoHdls(&meshMemo);
+        } else {
+            Log("[ShellHelper] ERROR: Не удалось выделить память для MESH координат");
+        }
+    } else {
+        Log("[ShellHelper] ERROR: Не удалось получить настройки по умолчанию для MESH, err=%d", (int)err);
+    }
+    
+    Log("[ShellHelper] SUCCESS: MESH создан по контуру");
+    return true;
 }
 
 // =============== Создание Spline из 2D точек ===============
