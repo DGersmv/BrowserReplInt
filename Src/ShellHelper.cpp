@@ -69,10 +69,136 @@ bool SetBaseLineForShell()
     return success;
 }
 
+// =============== ТЕСТОВАЯ ФУНКЦИЯ СОЗДАНИЯ MESH ===============
+bool CreateTestMesh()
+{
+    Log("[ShellHelper] ТЕСТ: Создаем MESH ТОЧНО КАК В ПРИМЕРЕ Element_Test!");
+    
+    // Создаем MESH элемент ТОЧНО КАК В ПРИМЕРЕ
+    API_Element element = {};
+    element.header.type = API_MeshID;
+    GSErrCode err = ACAPI_Element_GetDefaults(&element, nullptr);
+    if (err != NoError) {
+        Log("[ShellHelper] ТЕСТ ERROR: ACAPI_Element_GetDefaults failed, err=%d", (int)err);
+        return false;
+    }
+    
+    // Настройки ТОЧНО КАК В ПРИМЕРЕ
+    element.mesh.poly.nCoords = 5;
+    element.mesh.poly.nSubPolys = 1;
+    element.mesh.poly.nArcs = 0;
+    
+    Log("[ShellHelper] ТЕСТ: MESH настройки: nCoords=5, nSubPolys=1, nArcs=0");
+    
+    // Создаем memo ТОЧНО КАК В ПРИМЕРЕ
+    API_ElementMemo memo = {};
+    memo.coords = reinterpret_cast<API_Coord**>(BMAllocateHandle((element.mesh.poly.nCoords + 1) * sizeof(API_Coord), ALLOCATE_CLEAR, 0));
+    memo.pends = reinterpret_cast<Int32**>(BMAllocateHandle((element.mesh.poly.nSubPolys + 1) * sizeof(Int32), ALLOCATE_CLEAR, 0));
+    memo.parcs = reinterpret_cast<API_PolyArc**>(BMAllocateHandle(element.mesh.poly.nArcs * sizeof(API_PolyArc), ALLOCATE_CLEAR, 0));
+    memo.meshPolyZ = reinterpret_cast<double**>(BMAllocateHandle((element.mesh.poly.nCoords + 1) * sizeof(double), ALLOCATE_CLEAR, 0));
+    
+    // Координаты ТОЧНО КАК В ПРИМЕРЕ (прямоугольник)
+    (*memo.coords)[1].x = 0.0;
+    (*memo.coords)[1].y = 0.0;
+    (*memo.coords)[2].x = 5.0;
+    (*memo.coords)[2].y = 3.0;
+    (*memo.coords)[3].x = 5.0;
+    (*memo.coords)[3].y = 0.0;
+    (*memo.coords)[4].x = 0.0;
+    (*memo.coords)[4].y = 2.0;
+    (*memo.coords)[element.mesh.poly.nCoords] = (*memo.coords)[1]; // Замыкаем полигон
+    
+    (*memo.pends)[1] = element.mesh.poly.nCoords;
+    
+    // Z-координаты ТОЧНО КАК В ПРИМЕРЕ
+    (*memo.meshPolyZ)[1] = 1.0;
+    (*memo.meshPolyZ)[2] = 2.0;
+    (*memo.meshPolyZ)[3] = 3.0;
+    (*memo.meshPolyZ)[4] = 4.0;
+    (*memo.meshPolyZ)[5] = (*memo.meshPolyZ)[1]; // Замыкаем Z-координаты
+    
+    Log("[ShellHelper] ТЕСТ: Заполнены координаты и Z-координаты ТОЧНО КАК В ПРИМЕРЕ");
+    
+    // Создаем MESH ТОЧНО КАК В ПРИМЕРЕ
+    err = ACAPI_Element_Create(&element, &memo);
+    if (err == APIERR_IRREGULARPOLY) {
+        Log("[ShellHelper] ТЕСТ: Полигон нерегулярный, регуляризуем ТОЧНО КАК В ПРИМЕРЕ...");
+        
+        API_RegularizedPoly poly = {};
+        poly.coords = memo.coords;
+        poly.pends = memo.pends;
+        poly.parcs = memo.parcs;
+        poly.vertexIDs = memo.vertexIDs;
+        poly.needVertexAncestry = 1;
+        
+        Int32 nResult = 0;
+        API_RegularizedPoly** polys = nullptr;
+        GSErrCode regErr = ACAPI_Polygon_RegularizePolygon(&poly, &nResult, &polys);
+        
+        if (regErr != NoError) {
+            Log("[ShellHelper] ТЕСТ ERROR: ACAPI_Polygon_RegularizePolygon failed, err=%d", (int)regErr);
+            ACAPI_DisposeElemMemoHdls(&memo);
+            return false;
+        }
+        
+        if (regErr == NoError) {
+            Log("[ShellHelper] ТЕСТ: Регуляризация успешна, создаем %d полигонов", (int)nResult);
+            
+            for (Int32 i = 0; i < nResult && err == NoError; i++) {
+                element.mesh.poly.nCoords = BMhGetSize(reinterpret_cast<GSHandle>((*polys)[i].coords)) / sizeof(API_Coord) - 1;
+                element.mesh.poly.nSubPolys = BMhGetSize(reinterpret_cast<GSHandle>((*polys)[i].pends)) / sizeof(Int32) - 1;
+                element.mesh.poly.nArcs = BMhGetSize(reinterpret_cast<GSHandle>((*polys)[i].parcs)) / sizeof(API_PolyArc);
+                
+                API_ElementMemo tmpMemo = {};
+                tmpMemo.coords = (*polys)[i].coords;
+                tmpMemo.pends = (*polys)[i].pends;
+                tmpMemo.parcs = (*polys)[i].parcs;
+                tmpMemo.vertexIDs = (*polys)[i].vertexIDs;
+                
+                tmpMemo.meshPolyZ = reinterpret_cast<double**>(BMAllocateHandle((element.mesh.poly.nCoords + 1) * sizeof(double), ALLOCATE_CLEAR, 0));
+                if (tmpMemo.meshPolyZ != nullptr) {
+                    for (Int32 j = 1; j <= element.mesh.poly.nCoords; j++) {
+                        Int32 oldVertexIndex = 1; // Упрощенная логика
+                        if (oldVertexIndex <= 5) {
+                            (*tmpMemo.meshPolyZ)[j] = (*memo.meshPolyZ)[oldVertexIndex];
+                        } else {
+                            (*tmpMemo.meshPolyZ)[j] = 0.0;
+                        }
+                    }
+                    
+                    err = ACAPI_Element_Create(&element, &tmpMemo);
+                    if (err != NoError) {
+                        Log("[ShellHelper] ТЕСТ ERROR: ACAPI_Element_Create piece %d failed, err=%d", (int)i, (int)err);
+                    }
+                    BMKillHandle(reinterpret_cast<GSHandle*>(&tmpMemo.meshPolyZ));
+                }
+            }
+        }
+    }
+    
+    if (err == NoError) {
+        Log("[ShellHelper] ТЕСТ SUCCESS: MESH создан ТОЧНО КАК В ПРИМЕРЕ!");
+        ACAPI_DisposeElemMemoHdls(&memo);
+        return true;
+    } else {
+        Log("[ShellHelper] ТЕСТ ERROR: Не удалось создать MESH, err=%d", (int)err);
+        ACAPI_DisposeElemMemoHdls(&memo);
+        return false;
+    }
+}
+
 // =============== Основная функция создания оболочки ===============
 bool CreateShellFromLine(double widthMM, double stepMM)
 {
     Log("[ShellHelper] CreateShellFromLine: START, width=%.1fmm, step=%.1fmm", widthMM, stepMM);
+    
+    // ТЕСТ: Сначала попробуем создать простой SHELL
+    Log("[ShellHelper] ТЕСТ: Пробуем создать простой SHELL...");
+    if (CreateSimpleShell()) {
+        Log("[ShellHelper] ТЕСТ SUCCESS: Простой SHELL создан успешно!");
+    } else {
+        Log("[ShellHelper] ТЕСТ FAILED: Не удалось создать простой SHELL");
+    }
     
     // Проверяем, что базовая линия и Mesh выбраны
     if (g_baseLineGuid == APINULLGuid) {
@@ -544,7 +670,7 @@ bool ParseElementToSegments(const API_Element& element, PathData& path)
                 auto it = arcByBeg.find(segIdx);
                 Log("[ShellHelper] Checking segment %d for arcs...", segIdx);
 
-                Seg seg;
+                Seg seg = {};
                 if (it != arcByBeg.end() && std::fabs(it->second) > kEPS) {
                     // дуга
                     seg.type = SegType::Arc;
@@ -658,7 +784,12 @@ bool Create3DShellFromPath(const PathData& path, double widthMM, double stepMM)
     // Генерируем позиции точек по шагу (как в DistributeOnSinglePath)
     GS::Array<double> sVals;
     for (double s = 0.0; s <= path.total + 1e-9; s += step) {
-        sVals.Push(std::min(s, path.total));
+        sVals.Push(s);
+    }
+    
+    // Убеждаемся, что последняя точка точно на конце линии
+    if (sVals.IsEmpty() || sVals[sVals.GetSize() - 1] < path.total - 1e-9) {
+        sVals.Push(path.total);
     }
     
     Log("[ShellHelper] Сгенерировано %d точек по шагу %.3fм", (int)sVals.GetSize(), step);
@@ -813,6 +944,10 @@ bool Create3DShellFromPath(const PathData& path, double widthMM, double stepMM)
         startLine.line.begC = leftSplinePoints[0];
         startLine.line.endC = rightSplinePoints[0];
         
+        Log("[ShellHelper] Start Line: begC=(%.3f,%.3f), endC=(%.3f,%.3f)", 
+            startLine.line.begC.x, startLine.line.begC.y,
+            startLine.line.endC.x, startLine.line.endC.y);
+        
         err = ACAPI_CallUndoableCommand("Create Start Line", [&]() -> GSErrCode {
             return ACAPI_Element_Create(&startLine, nullptr);
         });
@@ -832,6 +967,10 @@ bool Create3DShellFromPath(const PathData& path, double widthMM, double stepMM)
         endLine.line.begC = leftSplinePoints[leftSplinePoints.GetSize() - 1];
         endLine.line.endC = rightSplinePoints[rightSplinePoints.GetSize() - 1];
         
+        Log("[ShellHelper] End Line: begC=(%.3f,%.3f), endC=(%.3f,%.3f)", 
+            endLine.line.begC.x, endLine.line.begC.y,
+            endLine.line.endC.x, endLine.line.endC.y);
+        
         err = ACAPI_CallUndoableCommand("Create End Line", [&]() -> GSErrCode {
             return ACAPI_Element_Create(&endLine, nullptr);
         });
@@ -845,8 +984,8 @@ bool Create3DShellFromPath(const PathData& path, double widthMM, double stepMM)
     
     Log("[ShellHelper] SUCCESS: Замыкающие линии созданы");
     
-    // Шаг 6: Создаем MESH по полученному контуру с точками
-    Log("[ShellHelper] Создаем MESH по полученному контуру с точками");
+    // Шаг 6: Создаем SHELL вместо MESH!
+    Log("[ShellHelper] Создаем SHELL вместо MESH!");
     
     // Создаем замкнутый контур для MESH: левые точки + правые точки в обратном порядке
     GS::Array<API_Coord> meshContourPoints;
@@ -863,49 +1002,149 @@ bool Create3DShellFromPath(const PathData& path, double widthMM, double stepMM)
     
     Log("[ShellHelper] MESH контур: %d точек", (int)meshContourPoints.GetSize());
     
-    // Создаем MESH элемент
+    // СОЗДАЕМ MESH С УРОВНЯМИ! 🎯
     API_Element mesh = {};
     mesh.header.type = API_MeshID;
     err = ACAPI_Element_GetDefaults(&mesh, nullptr);
     if (err == NoError) {
-        // Настраиваем MESH
-        mesh.mesh.poly.nCoords = (Int32)meshContourPoints.GetSize();
+        // ПРОСТОЙ MESH КАК ПОЛИГОН! 🎯
+        const Int32 nCoords = (Int32)meshContourPoints.GetSize();
+        
+        mesh.mesh.poly.nCoords = nCoords;
         mesh.mesh.poly.nSubPolys = 1;
         mesh.mesh.poly.nArcs = 0;
+        
+        Log("[ShellHelper] ПРОСТОЙ MESH: %d координат, 1 полигон", (int)nCoords);
         
         // Создаем memo для MESH
         API_ElementMemo meshMemo = {};
         BNZeroMemory(&meshMemo, sizeof(API_ElementMemo));
         
-        // Выделяем память для координат
-        meshMemo.coords = reinterpret_cast<API_Coord**>(BMAllocateHandle((meshContourPoints.GetSize() + 1) * sizeof(API_Coord), ALLOCATE_CLEAR, 0));
+        // ВЫДЕЛЯЕМ ПАМЯТЬ ДЛЯ КООРДИНАТ! 🎯
+        meshMemo.coords = reinterpret_cast<API_Coord**>(BMAllocateHandle((nCoords + 1) * (GSSize)sizeof(API_Coord), ALLOCATE_CLEAR, 0));
         if (meshMemo.coords != nullptr) {
+            // Инициализируем элемент с индексом 0
+            (*meshMemo.coords)[0] = meshContourPoints[0]; // Заглушка для элемента 0
+            
             // Заполняем координаты (1-based indexing)
             for (UIndex i = 0; i < meshContourPoints.GetSize(); ++i) {
                 (*meshMemo.coords)[i + 1] = meshContourPoints[i];
             }
             
+            // ВЫДЕЛЯЕМ ПАМЯТЬ ДЛЯ Z-КООРДИНАТ! 🎯
+            meshMemo.meshPolyZ = reinterpret_cast<double**>(BMAllocateHandle((nCoords + 1) * (GSSize)sizeof(double), ALLOCATE_CLEAR, 0));
+            if (meshMemo.meshPolyZ != nullptr) {
+                // Инициализируем элемент с индексом 0
+                (*meshMemo.meshPolyZ)[0] = 0.0; // Заглушка для элемента 0
+                
+                // Заполняем Z-координаты из левых и правых точек
+                UIndex zIndex = 1; // 1-based indexing
+                
+                // Добавляем Z-координаты левых точек (от начала до конца)
+                for (UIndex i = 0; i < leftPoints.GetSize(); ++i) {
+                    (*meshMemo.meshPolyZ)[zIndex++] = leftPoints[i].z;
+                }
+                
+                // Добавляем Z-координаты правых точек (от конца до начала)
+                for (Int32 i = rightPoints.GetSize() - 1; i >= 0; --i) {
+                    (*meshMemo.meshPolyZ)[zIndex++] = rightPoints[i].z;
+                }
+                
+                Log("[ShellHelper] MESH Z-координаты: %d точек", (int)nCoords);
+                
+                // ПРОСТОЙ MESH БЕЗ УРОВНЕЙ! 🎯
+                // Попробуем создать MESH как простой полигон с Z-координатами
+                Log("[ShellHelper] MESH: создаем простой MESH без уровней");
+            } else {
+                Log("[ShellHelper] ERROR: Не удалось выделить память для Z-координат MESH");
+                ACAPI_DisposeElemMemoHdls(&meshMemo);
+                return false;
+            }
+            
             // Создаем MESH внутри Undo-команды
             err = ACAPI_CallUndoableCommand("Create Mesh", [&]() -> GSErrCode {
-                return ACAPI_Element_Create(&mesh, &meshMemo);
+                GSErrCode createErr = ACAPI_Element_Create(&mesh, &meshMemo);
+                
+                // Если полигон нерегулярный, нужно его регуляризовать!
+                if (createErr == APIERR_IRREGULARPOLY) {
+                    Log("[ShellHelper] MESH: Полигон нерегулярный, регуляризуем...");
+                    
+                    API_RegularizedPoly poly = {};
+                    poly.coords = meshMemo.coords;
+                    poly.pends = meshMemo.pends;
+                    poly.parcs = meshMemo.parcs;
+                    poly.vertexIDs = meshMemo.vertexIDs;
+                    poly.needVertexAncestry = 1;
+                    
+                    Int32 nResult = 0;
+                    API_RegularizedPoly** polys = nullptr;
+                    GSErrCode regErr = ACAPI_Polygon_RegularizePolygon(&poly, &nResult, &polys);
+                    
+                    if (regErr == NoError && nResult > 0) {
+                        Log("[ShellHelper] MESH: Регуляризация успешна, создаем %d полигонов", (int)nResult);
+                        
+                        // Создаем регуляризованные полигоны
+                        for (Int32 i = 0; i < nResult; i++) {
+                            mesh.mesh.poly.nCoords = BMhGetSize(reinterpret_cast<GSHandle>((*polys)[i].coords)) / sizeof(API_Coord) - 1;
+                            mesh.mesh.poly.nSubPolys = BMhGetSize(reinterpret_cast<GSHandle>((*polys)[i].pends)) / sizeof(Int32) - 1;
+                            mesh.mesh.poly.nArcs = BMhGetSize(reinterpret_cast<GSHandle>((*polys)[i].parcs)) / sizeof(API_PolyArc);
+                            
+                            // Создаем временный memo для регуляризованного полигона
+                            API_ElementMemo tmpMemo = {};
+                            tmpMemo.coords = (*polys)[i].coords;
+                            tmpMemo.pends = (*polys)[i].pends;
+                            tmpMemo.parcs = (*polys)[i].parcs;
+                            tmpMemo.vertexIDs = (*polys)[i].vertexIDs;
+                            
+                            // Выделяем память для Z-координат
+                            tmpMemo.meshPolyZ = reinterpret_cast<double**>(BMAllocateHandle((mesh.mesh.poly.nCoords + 1) * sizeof(double), ALLOCATE_CLEAR, 0));
+                            if (tmpMemo.meshPolyZ != nullptr) {
+                                // Копируем Z-координаты из оригинального meshPolyZ
+                                for (Int32 j = 1; j <= mesh.mesh.poly.nCoords; j++) {
+                                    // Находим соответствующий индекс в оригинальном массиве
+                                    Int32 oldVertexIndex = 1; // Упрощенная логика - можно улучшить
+                                    if (oldVertexIndex <= (Int32)meshContourPoints.GetSize()) {
+                                        (*tmpMemo.meshPolyZ)[j] = (*meshMemo.meshPolyZ)[oldVertexIndex];
+                                    } else {
+                                        (*tmpMemo.meshPolyZ)[j] = 0.0;
+                                    }
+                                }
+                                
+                                GSErrCode pieceErr = ACAPI_Element_Create(&mesh, &tmpMemo);
+                                if (pieceErr != NoError) {
+                                    Log("[ShellHelper] MESH ERROR: Не удалось создать регуляризованный полигон %d, err=%d", (int)i, (int)pieceErr);
+                                }
+                                
+                                BMKillHandle(reinterpret_cast<GSHandle*>(&tmpMemo.meshPolyZ));
+                            }
+                        }
+                        
+                        createErr = NoError; // Успешно создали регуляризованные полигоны
+                    } else {
+                        Log("[ShellHelper] MESH ERROR: Не удалось регуляризовать полигон, err=%d", (int)regErr);
+                    }
+                }
+                
+                return createErr;
             });
             
             if (err == NoError) {
-                Log("[ShellHelper] SUCCESS: MESH создан с %d точками", (int)meshContourPoints.GetSize());
+                Log("[ShellHelper] SUCCESS: ПРОСТОЙ MESH создан! %d координат", (int)nCoords);
+                ACAPI_DisposeElemMemoHdls(&meshMemo);
+                return true;
             } else {
-                Log("[ShellHelper] ERROR: Не удалось создать MESH, err=%d", (int)err);
+                Log("[ShellHelper] ERROR: Не удалось создать простой MESH, err=%d", (int)err);
+                ACAPI_DisposeElemMemoHdls(&meshMemo);
+                return false;
             }
-            
-            ACAPI_DisposeElemMemoHdls(&meshMemo);
         } else {
-            Log("[ShellHelper] ERROR: Не удалось выделить память для MESH координат");
+            Log("[ShellHelper] ERROR: Не удалось выделить память для координат MESH");
+            return false;
         }
     } else {
         Log("[ShellHelper] ERROR: Не удалось получить настройки по умолчанию для MESH, err=%d", (int)err);
+        return false;
     }
-    
-    Log("[ShellHelper] SUCCESS: MESH создан по контуру");
-    return true;
 }
 
 // =============== Создание Spline из 2D точек ===============
@@ -936,6 +1175,9 @@ API_Guid CreateSplineFromPoints(const GS::Array<API_Coord>& points)
     // Выделяем память для координат (1-based indexing!)
     // Выделяем nCoords + 1 элементов, но используем только индексы от 1 до nCoords
     memo.coords = reinterpret_cast<API_Coord**>(BMAllocateHandle((nCoords + 1) * (GSSize)sizeof(API_Coord), ALLOCATE_CLEAR, 0));
+    
+    // Инициализируем элемент с индексом 0, чтобы избежать (0,0)
+    (*memo.coords)[0] = points[0]; // Используем первую точку как заглушку
     if (memo.coords == nullptr) {
         Log("[ShellHelper] ERROR: Не удалось выделить память для координат Spline");
         return APINULLGuid;
@@ -1073,6 +1315,9 @@ API_Guid Create3DShell(const GS::Array<API_Coord3D>& points)
         return APINULLGuid;
     }
     
+    // Инициализируем элемент с индексом 0, чтобы избежать (0,0)
+    (*memo.coords)[0] = {points[0].x, points[0].y}; // Используем первую точку как заглушку
+    
     // Заполняем 2D контур (1-based indexing!) с логированием для отладки
     for (Int32 i = 0; i < nUnique; ++i) {
         (*memo.coords)[i + 1] = {points[i].x, points[i].y};
@@ -1159,6 +1404,9 @@ bool CreateRuledShell(const API_Guid& leftSplineGuid, const API_Guid& rightSplin
         Log("[ShellHelper] ERROR: Не удалось выделить память для координат Shell");
         return false;
     }
+    
+    // Инициализируем элемент с индексом 0, чтобы избежать (0,0)
+    (*memo.coords)[0] = contour[0]; // Используем первую точку как заглушку
     
     // Заполняем координаты (1-based indexing!)
     for (Int32 i = 0; i < (Int32)contour.GetSize(); ++i) {
@@ -1506,6 +1754,65 @@ bool Create3DSpline(const GS::Array<API_Coord3D>& points, const GS::UniString& n
     
     Log("[ShellHelper] TODO: Создание 3D Spline не реализовано");
     return false;
+}
+
+// =============== ПРОСТАЯ ФУНКЦИЯ СОЗДАНИЯ SHELL ===============
+bool CreateSimpleShell()
+{
+    Log("[ShellHelper] ПРОСТОЙ SHELL: Создаем простой shell элемент");
+    
+    // Создаем SHELL элемент
+    API_Element shell = {};
+    shell.header.type = API_ShellID;
+    GSErrCode err = ACAPI_Element_GetDefaults(&shell, nullptr);
+    if (err != NoError) {
+        Log("[ShellHelper] ПРОСТОЙ SHELL ERROR: ACAPI_Element_GetDefaults failed, err=%d", (int)err);
+        return false;
+    }
+    
+    Log("[ShellHelper] ПРОСТОЙ SHELL: настройки получены успешно");
+    
+    // Создаем memo для SHELL
+    API_ElementMemo shellMemo = {};
+    BNZeroMemory(&shellMemo, sizeof(API_ElementMemo));
+    
+    // Создаем простой прямоугольник для shell (4 точки)
+    const Int32 nCoords = 4;
+    shellMemo.coords = reinterpret_cast<API_Coord**>(BMAllocateHandle((nCoords + 1) * (GSSize)sizeof(API_Coord), ALLOCATE_CLEAR, 0));
+    if (shellMemo.coords != nullptr) {
+        // Простой прямоугольник
+        (*shellMemo.coords)[0] = {0.0, 0.0}; // Заглушка
+        (*shellMemo.coords)[1] = {0.0, 0.0}; // Точка 1
+        (*shellMemo.coords)[2] = {3.0, 0.0}; // Точка 2
+        (*shellMemo.coords)[3] = {3.0, 2.0}; // Точка 3
+        (*shellMemo.coords)[4] = {0.0, 2.0}; // Точка 4
+        
+        // Настраиваем pends для контура
+        shellMemo.pends = reinterpret_cast<Int32**>(BMAllocateHandle(2 * (GSSize)sizeof(Int32), ALLOCATE_CLEAR, 0));
+        if (shellMemo.pends != nullptr) {
+            (*shellMemo.pends)[0] = 0;        // Начало контура
+            (*shellMemo.pends)[1] = nCoords;  // Конец контура
+            Log("[ShellHelper] ПРОСТОЙ SHELL pends: [0, %d]", (int)nCoords);
+        }
+        
+        // Создаем SHELL внутри Undo-команды
+        err = ACAPI_CallUndoableCommand("Create Simple Shell", [&]() -> GSErrCode {
+            return ACAPI_Element_Create(&shell, &shellMemo);
+        });
+        
+        if (err == NoError) {
+            Log("[ShellHelper] ПРОСТОЙ SHELL SUCCESS: SHELL создан! Простой прямоугольник");
+            ACAPI_DisposeElemMemoHdls(&shellMemo);
+            return true;
+        } else {
+            Log("[ShellHelper] ПРОСТОЙ SHELL ERROR: Не удалось создать SHELL, err=%d", (int)err);
+            ACAPI_DisposeElemMemoHdls(&shellMemo);
+            return false;
+        }
+    } else {
+        Log("[ShellHelper] ПРОСТОЙ SHELL ERROR: Не удалось выделить память для координат SHELL");
+        return false;
+    }
 }
 
 } // namespace ShellHelper

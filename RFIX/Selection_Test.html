@@ -384,6 +384,61 @@
       });
     }
 
+    function CreateDimensionsBetweenObjects() {
+      const A = window.ACAPI;
+      if (!A) { AddLog('[Dimensions] ACAPI недоступен'); return; }
+      if (!A.CreateDimensionsBetweenObjects) {
+        AddLog('[Dimensions] API функция недоступна');
+        setInfo('info-dimensions-between', ' Функция недоступна (обновите плагин)');
+        return;
+      }
+
+      AddLog('[Dimensions] Запуск создания размеров между объектами...');
+      setInfo('info-dimensions-between', 'Создание размеров между выделенными объектами...');
+
+      // Вызываем функцию
+      Promise.resolve(A.CreateDimensionsBetweenObjects()).then(created => {
+        if (created) {
+          setInfo('info-dimensions-between', ' Размеры созданы!');
+          AddLog('[Dimensions] SUCCESS');
+        } else {
+          setInfo('info-dimensions-between', ' Не удалось создать размеры (см. лог)');
+          AddLog('[Dimensions] FAILED');
+        }
+      }).catch(e => {
+        AddLog('[Dimensions] Ошибка: ' + e);
+        setInfo('info-dimensions-between', ' Ошибка: ' + e);
+      });
+    }
+
+    function CreateDimensionsToPoint() {
+      const A = window.ACAPI;
+      if (!A) { AddLog('[Dimensions] ACAPI недоступен'); return; }
+      if (!A.CreateDimensionsToPoint) {
+        AddLog('[Dimensions] API функция недоступна');
+        setInfo('info-dimensions-to-point', ' Функция недоступна (обновите плагин)');
+        return;
+      }
+
+      AddLog('[Dimensions] Запуск создания размеров до точки...');
+      setInfo('info-dimensions-to-point', 'Кликните точку на плане...');
+
+      // Вызываем функцию
+      Promise.resolve(A.CreateDimensionsToPoint()).then(created => {
+        if (created) {
+          setInfo('info-dimensions-to-point', ' Размеры созданы!');
+          AddLog('[Dimensions] SUCCESS');
+        } else {
+          setInfo('info-dimensions-to-point', ' Не удалось создать размеры (см. лог)');
+          AddLog('[Dimensions] FAILED');
+        }
+      }).catch(e => {
+        AddLog('[Dimensions] Ошибка: ' + e);
+        setInfo('info-dimensions-to-point', ' Ошибка: ' + e);
+      });
+    }
+
+
     // ================= ПРИЗЕМЛЕНИЕ / СМЕЩЕНИЕ =================
     // ΔZ БЕЗ MESH: SetGroundObjects + (новый или старый) ApplyZDelta
     async function ApplyZDeltaUI() {
@@ -582,7 +637,7 @@
     <button class="tablink" onclick="openTab(event,'tab-orient')">Ориентация</button>
     <button class="tablink" onclick="openTab(event,'tab-ground')">Приземление</button>
     <button class="tablink" onclick="openTab(event,'tab-markup')">Разметка</button>
-    <button class="tablink" onclick="openTab(event,'tab-shell')">Оболочка</button>
+    <button class="tablink" onclick="openTab(event,'tab-shell')">Контуры</button>
     <button class="tablink" onclick="openTab(event,'tab-gdl')">GDL</button>
   </div>
 
@@ -750,22 +805,73 @@
       </div>
     </fieldset>
 
+    <fieldset class="control-block">
+      <legend>Размеры между объектами</legend>
+
+      <div style="text-align:center; margin-bottom:10px;">
+        <p style="font-size:12px; color:#666;">
+          1. Выделите несколько объектов (объекты, колонны, светильники)<br>
+          2. Нажмите кнопку<br>
+          3. Объекты отсортируются по координатам и размеры появятся последовательно (1→2, 2→3, 3→4...)
+        </p>
+      </div>
+
+      <div style="text-align:center; margin-top:15px;">
+        <input type="button" 
+               onclick="CreateDimensionsBetweenObjects()" 
+               value="Размеры между объектами"
+               style="font-size:16px; padding:8px 20px; font-weight:bold;">
+      </div>
+
+      <div id="info-dimensions-between" class="info-box">
+        Создаёт размеры расстояния между объектами последовательно.<br>
+        Поддерживаются: объекты, колонны, светильники.<br>
+        Объекты сортируются по координатам (X, затем Y), размеры создаются между соседними объектами (1→2, 2→3, 3→4...).
+      </div>
+    </fieldset>
+
+    <fieldset class="control-block">
+      <legend>Размеры до точки</legend>
+
+      <div style="text-align:center; margin-bottom:10px;">
+        <p style="font-size:12px; color:#666;">
+          1. Выделите объекты (объекты, колонны, светильники)<br>
+          2. Нажмите кнопку и кликните <b>точку</b> на плане<br>
+          3. Размеры появятся от каждого объекта до выбранной точки
+        </p>
+      </div>
+
+      <div style="text-align:center; margin-top:15px;">
+        <input type="button" 
+               onclick="CreateDimensionsToPoint()" 
+               value="Размеры до точки"
+               style="font-size:16px; padding:8px 20px; font-weight:bold;">
+      </div>
+
+      <div id="info-dimensions-to-point" class="info-box">
+        Создаёт размеры от всех выделенных объектов до выбранной точки.<br>
+        Поддерживаются: объекты, колонны, светильники.<br>
+        Полезно для разметки до контрольных точек, углов, центров и т.д.
+      </div>
+    </fieldset>
+
+
     <button class="tab-help"
             data-help-url="https://landscape.227.info/help/dimensions"
             data-help-title="Справка: Разметка">Помощь</button>
   </div>
 
-  <!-- Оболочка -->
+  <!-- Контуры -->
   <div id="tab-shell" class="tabcontent">
     <fieldset class="control-block">
-      <legend>Создание оболочки по линии</legend>
+      <legend>Создание контуров по линии</legend>
 
       <div style="text-align:center; margin-bottom:10px;">
         <p style="font-size:12px; color:#666;">
           1. Нажмите "Выбрать линию" и выберите базовую линию<br>
-          2. Нажмите "Выбрать Mesh" и выберите Mesh для высот<br>
-          3. Задайте ширину и шаг<br>
-          4. Нажмите кнопку для создания оболочки
+          2. Задайте ширину контура<br>
+          3. Нажмите кнопку для создания контуров<br>
+          <strong>Примечание:</strong> Для spline нужен шаг, для остальных линий - только ширина
         </p>
       </div>
 
@@ -773,11 +879,6 @@
         <input type="button" 
                onclick="SelectBaseLine()" 
                value="Выбрать линию"
-               style="font-size:14px; padding:6px 15px; font-weight:bold;">
-        <br><br>
-        <input type="button" 
-               onclick="SelectMeshSurface()" 
-               value="Выбрать Mesh"
                style="font-size:14px; padding:6px 15px; font-weight:bold;">
       </div>
 
@@ -794,14 +895,16 @@
       <div style="text-align:center; margin-top:15px;">
         <input type="button" 
                onclick="CreateShellFromLine()" 
-               value="Создать оболочку"
+               value="Создать контуры"
                style="font-size:16px; padding:8px 20px; font-weight:bold;">
       </div>
 
       <div id="info-shell" class="info-box">
-        Создаёт 3D оболочку по базовой линии с заданными параметрами.<br>
-        Перпендикулярные точки проецируются на Mesh и соединяются в 3D Spline.<br>
-        <strong>Внимание:</strong> Сначала выберите базовую линию, затем Mesh для получения высот.
+        Создаёт контуры по базовой линии с заданными параметрами.<br>
+        <strong>Для spline:</strong> откладывает точки с заданным шагом, строит перпендикуляры<br>
+        <strong>Для остальных линий:</strong> проверяет замкнутость, строит перпендикуляры в начале/конце<br>
+        Создаёт два боковых контура с замыкающими линиями (для открытых линий).<br>
+        <strong>Внимание:</strong> Сначала выберите базовую линию (spline/polyline/дуга/линия).
       </div>
     </fieldset>
 

@@ -11,7 +11,7 @@
 #include "BuildHelper.hpp"
 #include "GDLHelper.hpp"
 #include "MarkupHelper.hpp"
-#include "ShellHelper.hpp"
+#include "RoadHelper.hpp"
 #include "HelpPalette.hpp"
 
 
@@ -406,22 +406,32 @@ void BrowserRepl::RegisterACAPIJavaScriptObject()
 		return new JS::Value(MarkupHelper::CreateDimensionsToLine());
 		}));
 
-	// --- Shell API (выбор базовой линии) ---
+	jsACAPI->AddItem(new JS::Function("CreateDimensionsBetweenObjects", [](GS::Ref<JS::Base>) {
+		if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser("[JS] CreateDimensionsBetweenObjects()");
+		return new JS::Value(MarkupHelper::CreateDimensionsBetweenObjects());
+		}));
+
+	jsACAPI->AddItem(new JS::Function("CreateDimensionsToPoint", [](GS::Ref<JS::Base>) {
+		if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser("[JS] CreateDimensionsToPoint()");
+		return new JS::Value(MarkupHelper::CreateDimensionsToPoint());
+		}));
+
+	// --- Road API (выбор осевой линии) ---
 	jsACAPI->AddItem(new JS::Function("SetBaseLineForShell", [](GS::Ref<JS::Base>) {
-		if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser("[JS] SetBaseLineForShell()");
+		if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser("[JS] SetBaseLineForShell() [Road]");
 		
-		const bool success = ShellHelper::SetBaseLineForShell();
+		const bool success = RoadHelper::SetCenterLine();
 		return new JS::Value(success);
 		}));
 
 	jsACAPI->AddItem(new JS::Function("SetMeshSurfaceForShell", [](GS::Ref<JS::Base>) {
-		if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser("[JS] SetMeshSurfaceForShell()");
+		if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser("[JS] SetMeshSurfaceForShell() [Road]");
 		
-		const bool success = ShellHelper::SetMeshSurfaceForShell();
+		const bool success = RoadHelper::SetTerrainMesh();
 		return new JS::Value(success);
 		}));
 
-	// --- Shell API (создание оболочки по линии) ---
+	// --- Road API (создание дорожки по линии) ---
 	jsACAPI->AddItem(new JS::Function("CreateShellFromLine", [](GS::Ref<JS::Base> param) {
 		// Парсим параметры: принимаем строку "width:..,step:.." или просто число
 		double width = 1000.0; // мм по умолчанию
@@ -458,9 +468,12 @@ void BrowserRepl::RegisterACAPIJavaScriptObject()
 			BrowserRepl::GetInstance().LogToBrowser(GS::UniString::Printf("[JS] CreateShellFromLine parsed: width=%.1fmm, step=%.1fmm", width, step));
 		}
 		
-		ACAPI_WriteReport("[BrowserRepl] Вызов ShellHelper::CreateShellFromLine", false);
-		const bool success = ShellHelper::CreateShellFromLine(width, step);
-		ACAPI_WriteReport("[BrowserRepl] ShellHelper::CreateShellFromLine вернул: %s", false, success ? "true" : "false");
+		ACAPI_WriteReport("[BrowserRepl] Вызов RoadHelper::BuildRoad", false);
+		RoadHelper::RoadParams params;
+		params.widthMM = width;
+		params.sampleStepMM = step;
+		const bool success = RoadHelper::BuildRoad(params);
+		ACAPI_WriteReport("[BrowserRepl] RoadHelper::BuildRoad вернул: %s", false, success ? "true" : "false");
 		return new JS::Value(success);
 		}));
 

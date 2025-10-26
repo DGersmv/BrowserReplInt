@@ -59,7 +59,7 @@ static bool GetStoryLevelZ(short floorInd, double& outZ)
         const Int32 idx = floorInd - si.firstStory;
         if (0 <= idx && idx < cnt) outZ = (*si.data)[idx].level;
     }
-    Log("[Story] floorInd=%d to storyZ=%.6f", (int)floorInd, outZ);
+    		// Log("[Story] floorInd=%d to storyZ=%.6f", (int)floorInd, outZ); // Убрали - слишком много логов
     BMKillHandle((GSHandle*)&si.data);
     return true;
 }
@@ -270,8 +270,8 @@ static inline double GetMeshBaseZ(const API_Element& meshElem)
     const double meshLevel = meshElem.mesh.level;
 
     const double baseZ = storyZ + meshLevel;
-    Log("[MeshBase] floorInd=%d storyZ=%.6f meshLevel=%.6f to baseZ=%.6f",
-        (int)meshElem.header.floorInd, storyZ, meshLevel, baseZ);
+    	// Log("[MeshBase] floorInd=%d storyZ=%.6f meshLevel=%.6f to baseZ=%.6f", // Убрали - слишком много логов
+                 // (int)meshElem.header.floorInd, storyZ, meshLevel, baseZ); // Убрали - слишком много логов
     return baseZ;
 }
 
@@ -374,7 +374,7 @@ static MeshPolyData BuildContourNodes(const API_Element& elem, const API_Element
         out.contour.push_back({ c.x, c.y, absZ });
     }
     out.ok = true;
-    Log("[Contour] built nodes=%zu", out.contour.size());
+    	// Log("[Contour] built nodes=%zu", out.contour.size()); // Убрали - слишком много логов
     return out;
 }
 
@@ -436,14 +436,14 @@ static bool BuildTIN_AndSampleZ(const API_Element& elem, const API_ElementMemo& 
     const int lvlCnt = memo.meshLevelCoords ? (int)(BMGetHandleSize((GSHandle)memo.meshLevelCoords) / sizeof(API_MeshLevelCoord)) : 0;
     if (lvlCnt > 0 && lvlCnt < 100) {
         const API_MeshLevelCoord* lvl = *memo.meshLevelCoords;
-        Log("[TIN] level points: %d", lvlCnt);
+        		// Log("[TIN] level points: %d", lvlCnt); // Убрали - слишком много логов
         for (int i = 0; i < lvlCnt; ++i) {
             const TINNode P{ lvl[i].c.x, lvl[i].c.y, lvl[i].c.z };
             const int triIdx = FindTriContaining(nodes, tris, P);
             if (triIdx >= 0) {
                 const int pIdx = (int)nodes.size(); nodes.push_back(P);
                 int t0, t1, t2; SplitTriByPoint(nodes, tris, triIdx, pIdx, t0, t1, t2);
-                Log("[TIN]  add level #%d in tri=%d", i + 1, triIdx);
+                			// Log("[TIN]  add level #%d in tri=%d", i + 1, triIdx); // Убрали - слишком много логов
             }
         }
     }
@@ -468,7 +468,7 @@ static bool BuildTIN_AndSampleZ(const API_Element& elem, const API_ElementMemo& 
     double wA, wB, wC; BaryXY(P, nodes[t.a], nodes[t.b], nodes[t.c], wA, wB, wC);
     outZ = wA * nodes[t.a].z + wB * nodes[t.b].z + wC * nodes[t.c].z;
     outN = TriNormal3D(nodes[t.a], nodes[t.b], nodes[t.c]);
-    Log("[TIN] hit tri=(%d,%d,%d) to Z=%.6f", t.a, t.b, t.c, outZ);
+    		// Log("[TIN] hit tri=(%d,%d,%d) to Z=%.6f", t.a, t.b, t.c, outZ); // Убрали - слишком много логов
     return true;
 }
 
@@ -621,7 +621,7 @@ bool GroundHelper::SetGroundObjects()
 bool GroundHelper::GetGroundZAndNormal(const API_Coord3D& pos3D, double& z, API_Vector3D& normal)
 {
     if (g_surfaceGuid == APINULLGuid) { Log("[GetGround] surface not set"); return false; }
-    Log("[GetGround] pos=(%.6f, %.6f, %.6f)", pos3D.x, pos3D.y, pos3D.z);
+    	// Log("[GetGround] pos=(%.6f, %.6f, %.6f)", pos3D.x, pos3D.y, pos3D.z); // Убрали - слишком много логов
     return ComputeGroundZ_MemoOnly(g_surfaceGuid, pos3D, z, normal);
 }
 

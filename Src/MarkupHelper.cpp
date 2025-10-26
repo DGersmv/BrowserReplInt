@@ -882,5 +882,263 @@ namespace MarkupHelper {
 		}
 	}
 
+
+	// ============================================================================
+	// Проставить размеры между объектами последовательно (1→2, 2→3, 3→4...)
+	// ============================================================================
+	bool CreateDimensionsBetweenObjects()
+	{
+		Log("=== CreateDimensionsBetweenObjects START ===");
+
+		// 1) Получаем выделенные элементы
+		API_SelectionInfo selInfo = {};
+		GS::Array<API_Neig> selNeigs;
+		if (ACAPI_Selection_Get(&selInfo, &selNeigs, false) != NoError) {
+			Log("ERROR: не удалось получить выделение");
+			return false;
+		}
+
+		if (selNeigs.IsEmpty()) {
+			Log("ERROR: ничего не выделено");
+			return false;
+		}
+
+		Log(GS::UniString::Printf("Выделено элементов: %d", (int)selNeigs.GetSize()));
+
+		// 2) Собираем точки привязки всех объектов
+		struct ObjectPoint {
+			API_Coord coord;
+			API_Guid guid;
+			GS::UniString typeName;
+		};
+		std::vector<ObjectPoint> objects;
+
+		for (UIndex i = 0; i < selNeigs.GetSize(); ++i) {
+			const API_Neig& neig = selNeigs[i];
+			
+			// Получаем элемент
+			API_Element element = {};
+			element.header.guid = neig.guid;
+			if (ACAPI_Element_Get(&element) != NoError) {
+				Log(GS::UniString::Printf("WARN: не удалось получить элемент %d", (int)i));
+				continue;
+			}
+
+			// Определяем точку привязки в зависимости от типа элемента
+			ObjectPoint obj;
+			obj.guid = neig.guid;
+			bool hasAnchor = false;
+
+			switch (element.header.type.typeID) {
+			case API_ObjectID:
+				obj.coord = element.object.pos;
+				obj.typeName = "Object";
+				hasAnchor = true;
+				break;
+			case API_ColumnID:
+				obj.coord = element.column.origoPos;
+				obj.typeName = "Column";
+				hasAnchor = true;
+				break;
+			case API_LampID:
+				obj.coord = element.lamp.pos;
+				obj.typeName = "Lamp";
+				hasAnchor = true;
+				break;
+			case API_WindowID:
+			case API_DoorID:
+				// Окна и двери не нужны
+				continue;
+			default:
+				Log(GS::UniString::Printf("WARN: неподдерживаемый тип элемента: %d", (int)element.header.type.typeID));
+				continue;
+			}
+
+			if (hasAnchor) {
+				objects.push_back(obj);
+				Log(GS::UniString::Printf("Точка %d: (%.3f, %.3f) - %s", 
+					(int)objects.size(), obj.coord.x, obj.coord.y, obj.typeName.ToCStr().Get()));
+			}
+		}
+
+		if (objects.size() < 2) {
+			Log("ERROR: нужно минимум 2 объекта для создания размеров");
+			return false;
+		}
+
+		Log(GS::UniString::Printf("Собрано объектов: %d", (int)objects.size()));
+
+		// 3) Сортируем объекты по координатам (сначала по X, потом по Y)
+		std::sort(objects.begin(), objects.end(), [](const ObjectPoint& a, const ObjectPoint& b) {
+			if (std::abs(a.coord.x - b.coord.x) < 1e-6) {
+				return a.coord.y < b.coord.y; // если X одинаковые, сортируем по Y
+			}
+			return a.coord.x < b.coord.x; // сортируем по X
+		});
+
+		Log("Объекты отсортированы по координатам");
+
+		// 4) Создаем размеры последовательно (1→2, 2→3, 3→4...)
+		int createdCount = 0;
+		GSErrCode err = ACAPI_CallUndoableCommand("Размеры между объектами", [&]() -> GSErrCode {
+			for (size_t i = 0; i < objects.size() - 1; ++i) {
+				const API_Coord& pt1 = objects[i].coord;
+				const API_Coord& pt2 = objects[i + 1].coord;
+
+				// Вычисляем расстояние
+				double dx = pt2.x - pt1.x;
+				double dy = pt2.y - pt1.y;
+				double distance = sqrt(dx * dx + dy * dy);
+
+				// Создаем размер между двумя точками используя существующую функцию
+				if (CreateDimensionBetweenPoints(pt1, pt2)) {
+					createdCount++;
+					Log(GS::UniString::Printf("Размер %d: %.3fм между объектами %d→%d", 
+						createdCount, distance, (int)i+1, (int)i+2));
+				} else {
+					Log(GS::UniString::Printf("ERROR: не удалось создать размер между объектами %d→%d", (int)i+1, (int)i+2));
+				}
+			}
+			return NoError;
+		});
+
+		if (err == NoError && createdCount > 0) {
+			Log(GS::UniString::Printf("=== CreateDimensionsBetweenObjects END: создано %d размеров ===", createdCount));
+			return true;
+		} else {
+			Log(GS::UniString::Printf("=== CreateDimensionsBetweenObjects END: создано %d размеров (ошибка: %d) ===", createdCount, (int)err));
+			return false;
+		}
+	}
+
+	// ============================================================================
+	// Проставить размеры от объектов до выбранной точки
+	// ============================================================================
+	bool CreateDimensionsToPoint()
+	{
+		Log("=== CreateDimensionsToPoint START ===");
+
+		// 1) Получаем выделенные элементы
+		API_SelectionInfo selInfo = {};
+		GS::Array<API_Neig> selNeigs;
+		if (ACAPI_Selection_Get(&selInfo, &selNeigs, false) != NoError) {
+			Log("ERROR: не удалось получить выделение");
+			return false;
+		}
+
+		if (selNeigs.IsEmpty()) {
+			Log("ERROR: ничего не выделено");
+			return false;
+		}
+
+		Log(GS::UniString::Printf("Выделено элементов: %d", (int)selNeigs.GetSize()));
+
+		// 2) Собираем точки привязки всех объектов
+		struct ObjectPoint {
+			API_Coord coord;
+			API_Guid guid;
+			GS::UniString typeName;
+		};
+		std::vector<ObjectPoint> objects;
+
+		for (UIndex i = 0; i < selNeigs.GetSize(); ++i) {
+			const API_Neig& neig = selNeigs[i];
+			
+			// Получаем элемент
+			API_Element element = {};
+			element.header.guid = neig.guid;
+			if (ACAPI_Element_Get(&element) != NoError) {
+				Log(GS::UniString::Printf("WARN: не удалось получить элемент %d", (int)i));
+				continue;
+			}
+
+			// Определяем точку привязки в зависимости от типа элемента
+			ObjectPoint obj;
+			obj.guid = neig.guid;
+			bool hasAnchor = false;
+
+			switch (element.header.type.typeID) {
+			case API_ObjectID:
+				obj.coord = element.object.pos;
+				obj.typeName = "Object";
+				hasAnchor = true;
+				break;
+			case API_ColumnID:
+				obj.coord = element.column.origoPos;
+				obj.typeName = "Column";
+				hasAnchor = true;
+				break;
+			case API_LampID:
+				obj.coord = element.lamp.pos;
+				obj.typeName = "Lamp";
+				hasAnchor = true;
+				break;
+			case API_WindowID:
+			case API_DoorID:
+				// Окна и двери не нужны
+				continue;
+			default:
+				Log(GS::UniString::Printf("WARN: неподдерживаемый тип элемента: %d", (int)element.header.type.typeID));
+				continue;
+			}
+
+			if (hasAnchor) {
+				objects.push_back(obj);
+				Log(GS::UniString::Printf("Точка %d: (%.3f, %.3f) - %s", 
+					(int)objects.size(), obj.coord.x, obj.coord.y, obj.typeName.ToCStr().Get()));
+			}
+		}
+
+		if (objects.empty()) {
+			Log("ERROR: не найдено подходящих объектов для создания размеров");
+			return false;
+		}
+
+		Log(GS::UniString::Printf("Собрано объектов: %d", (int)objects.size()));
+
+		// 3) Получаем целевую точку от пользователя
+		API_GetPointType gp = {}; 
+		CHCopyC("Размеры до точки: укажите целевую точку", gp.prompt);
+		GSErrCode err = ACAPI_UserInput_GetPoint(&gp);
+		if (err != NoError) {
+			Log("ERROR: пользователь отменил выбор точки");
+			return false;
+		}
+
+		const API_Coord targetPoint = { gp.pos.x, gp.pos.y };
+		Log(GS::UniString::Printf("Целевая точка: (%.3f, %.3f)", targetPoint.x, targetPoint.y));
+
+		// 4) Создаем размеры от каждого объекта до целевой точки
+		int createdCount = 0;
+		err = ACAPI_CallUndoableCommand("Размеры до точки", [&]() -> GSErrCode {
+			for (size_t i = 0; i < objects.size(); ++i) {
+				const API_Coord& objCoord = objects[i].coord;
+				
+				// Вычисляем расстояние
+				double dx = targetPoint.x - objCoord.x;
+				double dy = targetPoint.y - objCoord.y;
+				double distance = sqrt(dx * dx + dy * dy);
+
+				// Создаем размер от объекта до целевой точки
+				if (CreateDimensionBetweenPoints(objCoord, targetPoint)) {
+					createdCount++;
+					Log(GS::UniString::Printf("Размер %d: %.3fм от объекта %d до точки", 
+						createdCount, distance, (int)i+1));
+				} else {
+					Log(GS::UniString::Printf("ERROR: не удалось создать размер от объекта %d", (int)i+1));
+				}
+			}
+			return NoError;
+		});
+
+		if (err == NoError && createdCount > 0) {
+			Log(GS::UniString::Printf("=== CreateDimensionsToPoint END: создано %d размеров ===", createdCount));
+			return true;
+		} else {
+			Log(GS::UniString::Printf("=== CreateDimensionsToPoint END: создано %d размеров (ошибка: %d) ===", createdCount, (int)err));
+			return false;
+		}
+	}
+
 } // namespace MarkupHelper
 
