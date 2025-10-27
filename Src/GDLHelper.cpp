@@ -329,9 +329,9 @@ namespace GDLHelper {
 		
 		for (const auto& L : lines) {
 			AppendFormat(out, "drawindex %d\n", L.drawIndex);
-			AppendFormat(out, "pen %d\n", L.pen);
+			AppendFormat(out, "pen penAttribute_%d\n", L.pen);
 			if (L.lineType > 0) {
-				AppendFormat(out, "set line_type %d\n", L.lineType);
+				AppendFormat(out, "set line_type lineTypeAttribute_%d\n", L.lineType);
 			}
 			AppendFormat(out, "line_property %d\n", L.lineType);
 			AppendFormat(out, "LINE2 %.6f, %.6f, %.6f, %.6f\n",
@@ -339,20 +339,20 @@ namespace GDLHelper {
 		}
 		for (const auto& A : arcs) {
 			AppendFormat(out, "drawindex %d\n", A.drawIndex);
-			AppendFormat(out, "pen %d\n", A.pen);
+			AppendFormat(out, "pen penAttribute_%d\n", A.pen);
 			AppendFormat(out, "ARC2 %.6f, %.6f, %.6f, %.6f, %.6f\n",
 				A.cx - cx, A.cy - cy, A.r, A.sDeg, A.eDeg);
 		}
 		for (const auto& C : circles) {
 			AppendFormat(out, "drawindex %d\n", C.drawIndex);
-			AppendFormat(out, "pen %d\n", C.pen);
+			AppendFormat(out, "pen penAttribute_%d\n", C.pen);
 			AppendFormat(out, "CIRCLE2 %.6f, %.6f, %.6f\n",
 				C.cx - cx, C.cy - cy, C.r);
 		}
 		for (const auto& P : polys) {
 			AppendFormat(out, "drawindex %d\n", P.drawIndex);
 			AppendFormat(out, "! Hatch via POLY2_\n");
-			AppendFormat(out, "pen %d\n", P.pen);
+			AppendFormat(out, "pen penAttribute_%d\n", P.pen);
 			out.Append("set fill 1\n");
 			AppendFormat(out, "POLY2_ %d, %d,\n", (int)P.pts.GetSize(), P.frameFill); // используем frameFill
 			for (UIndex i = 0; i < P.pts.GetSize(); ++i) {
@@ -367,13 +367,13 @@ namespace GDLHelper {
 		for (const auto& CP : complexPolys) {
 			AppendFormat(out, "drawindex %d\n", CP.drawIndex);
 			AppendFormat(out, "! Complex polygon with arcs via poly2_b{5}\n");
-			AppendFormat(out, "pen %d\n", CP.pen);
+			AppendFormat(out, "pen penAttribute_%d\n", CP.pen);
 			if (CP.frameFill > 0) {
 				out.Append("set fill 1\n");
 			}
 			
 			// Генерируем poly2_b{5} с дугами
-			AppendFormat(out, "poly2_b{5} %d, %d, %d, %d, %d, %d,\n", 
+			AppendFormat(out, "poly2_b{5} %d, %d, %d, %d, penAttribute_%d, penAttribute_%d,\n", 
 				(int)CP.pts.GetSize(), CP.frameFill, 1, 3, CP.pen, CP.pen);
 			
 			// Генерируем координаты (только x, y)
@@ -383,14 +383,12 @@ namespace GDLHelper {
 					c.x - cx, c.y - cy, 33); // код точки
 			}
 			
-			// Генерируем дуги (если есть) - НЕ добавляем к координатам!
+			// Генерируем дуги ОТДЕЛЬНО (если есть)
 			if (CP.arcs.GetSize() > 0) {
 				for (UIndex i = 0; i < CP.arcs.GetSize(); ++i) {
 					const auto& arc = CP.arcs[i];
 					AppendFormat(out, "    %.6f, %.6f, %d,\n",
-						CP.pts[arc.begIndex - 1].x - cx, 
-						CP.pts[arc.begIndex - 1].y - cy, 
-						900); // код дуги
+						0.0, 0.0, 900); // код дуги с нулевыми координатами
 					AppendFormat(out, "    0, %.6f, %d,\n",
 						arc.arcAngle * 180.0 / PI, 4033); // угол в градусах
 				}
