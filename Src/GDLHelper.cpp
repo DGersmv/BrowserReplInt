@@ -383,7 +383,7 @@ namespace GDLHelper {
 					c.x - cx, c.y - cy, 33); // код точки
 			}
 			
-			// Генерируем дуги (если есть)
+			// Генерируем дуги (если есть) - НЕ добавляем к координатам!
 			if (CP.arcs.GetSize() > 0) {
 				for (UIndex i = 0; i < CP.arcs.GetSize(); ++i) {
 					const auto& arc = CP.arcs[i];
