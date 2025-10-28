@@ -282,7 +282,6 @@
 
       const folderPath = document.getElementById('layerFolder').value.trim();
       const layerName  = document.getElementById('layerName').value.trim();
-      const layerBaseID = document.getElementById('layerBaseID').value.trim();
 
       if (!folderPath) {
         AddLog('[UI] Введите путь к папке для слоев');
@@ -294,26 +293,20 @@
         document.getElementById('layerName').focus();
         return;
       }
-      if (!layerBaseID) {
-        AddLog('[UI] Введите базовое название для ID элементов');
-        document.getElementById('layerBaseID').focus();
-        return;
-      }
 
-      AddLog('[UI] Создание папки: ' + folderPath + ', слоя: ' + layerName + ', ID: ' + layerBaseID);
+      AddLog('[UI] Создание папки: ' + folderPath + ', слоя: ' + layerName);
       setInfo("info-layers", "Создание папки, слоя и перенос выделенных элементов...");
 
       if (typeof A.CreateLayerAndMoveElements === 'function') {
-        // мост ждёт folder|layer|baseID
-        const params = folderPath + '|' + layerName + '|' + layerBaseID;
+        // мост ждёт folder|layer (без baseID)
+        const params = folderPath + '|' + layerName;
 
         A.CreateLayerAndMoveElements(params).then(function(success) {
           if (success) {
-            AddLog('[UI] ✅ Папка/слой созданы, элементы перенесены и переименованы!');
-            setInfo("info-layers", "✅ Успешно! Папка: " + folderPath + ", Слой: " + layerName + ", ID: " + layerBaseID);
+            AddLog('[UI] ✅ Папка/слой созданы, элементы перенесены!');
+            setInfo("info-layers", "✅ Успешно! Папка: " + folderPath + ", Слой: " + layerName);
             document.getElementById('layerFolder').value  = '';
             document.getElementById('layerName').value    = '';
-            document.getElementById('layerBaseID').value  = '';
             setTimeout(UpdateSelectedElements, 1000);
           } else {
             AddLog('[UI] ❌ Ошибка при создании папки/слоя или переносе элементов');
@@ -476,7 +469,6 @@
       document.getElementById('baseID')      ?.addEventListener('keydown', e => { if (e.key === 'Enter') changeAllSelectedIDs(); });
       document.getElementById('layerFolder') ?.addEventListener('keydown', e => { if (e.key === 'Enter') createLayerAndMoveElements(); });
       document.getElementById('layerName')   ?.addEventListener('keydown', e => { if (e.key === 'Enter') createLayerAndMoveElements(); });
-      document.getElementById('layerBaseID') ?.addEventListener('keydown', e => { if (e.key === 'Enter') createLayerAndMoveElements(); });
 
       // help-кнопки (делегирование)
       document.addEventListener('click', function (e) {
@@ -715,8 +707,8 @@
           1. Выделите элементы (см. таблицу выше)<br>
           2. Укажите путь папки слоёв (например: "Ландшафт/Растения")<br>
           3. Укажите название нового слоя<br>
-          4. Укажите базовое имя для ID элементов<br>
-          5. Нажмите "Создать и переместить"
+          4. Нажмите "Создать и переместить"<br>
+          <small style="color:#888;">ID элементов можно изменить отдельно в блоке выше</small>
         </p>
       </div>
 
@@ -732,11 +724,6 @@
         <input type="text" id="layerName" placeholder="Например: Сосны обыкновенные" style="width: 250px; padding: 3px; margin: 3px 0;" />
       </div>
 
-      <div>
-        <label>Базовое ID:</label>
-        <input type="text" id="layerBaseID" placeholder="Например: Сосна" style="width: 250px; padding: 3px; margin: 3px 0;" />
-      </div>
-
       <div style="text-align:center; margin-top:15px;">
         <input type="button" 
                onclick="createLayerAndMoveElements()" 
@@ -749,7 +736,7 @@
         • Создастся папка для слоёв (если её нет)<br>
         • Создастся новый слой в этой папке<br>
         • Все выделенные элементы будут перемещены в этот слой<br>
-        • Элементы получат новые ID с порядковыми номерами<br>
+        • ID элементов останутся прежними (можно изменить отдельно)<br>
         • Это можно отменить через Ctrl+Z
       </div>
     </fieldset>
