@@ -533,7 +533,8 @@
     <button class="tablink" onclick="openTab(event,'tab-ground')">Приземление</button>
     <button class="tablink" onclick="openTab(event,'tab-markup')">Разметка</button>
     <button class="tablink" onclick="openTab(event,'tab-shell')">Контуры</button>
-    <button class="tablink" onclick="openTab(event,'tab-layers')">Слои (ID)</button>
+    <button class="tablink" onclick="openTab(event,'tab-id')">ID</button>
+    <button class="tablink" onclick="openTab(event,'tab-layers')">Слои</button>
   </div>
 
   <!-- Распределение -->
@@ -670,10 +671,9 @@
             data-help-title="Справка: Оболочка">Помощь</button>
   </div>
 
-  <!-- Слои (ID) -->
-  <div id="tab-layers" class="tabcontent">
-    <!-- Блок 1: просто задать новые ID выделению -->
-    <fieldset class="control-block" style="margin-bottom: 20px; position: relative; padding-bottom: 50px;">
+  <!-- ID -->
+  <div id="tab-id" class="tabcontent">
+    <fieldset class="control-block">
       <legend>Массово задать ID выделенным элементам</legend>
 
       <div style="text-align:center; margin-bottom:10px;">
@@ -697,8 +697,11 @@
               data-help-url="https://landscape.227.info/help/selection"
               data-help-title="Справка: Выбор элементов">Помощь</button>
     </fieldset>
+  </div>
 
-    <!-- Блок 2: создать папку/слой + переместить + ID -->
+  <!-- Слои -->
+  <div id="tab-layers" class="tabcontent">
+    <!-- Создать папку/слой + переместить элементы -->
     <fieldset class="control-block">
       <legend>Создать папку/слой и перенести элементы</legend>
 
