@@ -13,6 +13,7 @@ namespace SelectionHelper {
         GS::UniString guidStr;   // GUID элемента в строковом виде
         GS::UniString typeName;  // Человекочитаемое имя типа (Объект, Лампа, Колонна...)
         GS::UniString elemID;    // Имя/ID из Archicad
+        GS::UniString layerName; // Имя слоя элемента
     };
 
     // Получить список выделенных элементов

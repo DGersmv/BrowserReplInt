@@ -29,6 +29,14 @@ GS::Array<ElementInfo> GetSelectedElements ()
         if (ACAPI_Element_GetElementInfoString(&elemHead.guid, &elemID) == NoError)
             elemInfo.elemID = elemID;
 
+        // Получить информацию о слое
+        API_Attribute layerAttr = {};
+        layerAttr.header.typeID = API_LayerID;
+        layerAttr.header.index = elemHead.layer;
+        if (ACAPI_Attribute_Get(&layerAttr) == NoError) {
+            elemInfo.layerName = layerAttr.header.name;
+        }
+
         selectedElements.Push(elemInfo);
     }
 

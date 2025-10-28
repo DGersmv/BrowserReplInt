@@ -13,6 +13,7 @@
 #include "MarkupHelper.hpp"
 #include "RoadHelper.hpp"
 #include "HelpPalette.hpp"
+#include "LayerHelper.hpp"
 
 
 
@@ -92,6 +93,7 @@ GS::Ref<JS::Base> ConvertToJavaScriptVariable(const SelectionHelper::ElementInfo
 	js->AddItem(ConvertToJavaScriptVariable(elemInfo.guidStr));
 	js->AddItem(ConvertToJavaScriptVariable(elemInfo.typeName));
 	js->AddItem(ConvertToJavaScriptVariable(elemInfo.elemID));
+	js->AddItem(ConvertToJavaScriptVariable(elemInfo.layerName));
 	return js;
 }
 
@@ -207,7 +209,16 @@ void BrowserRepl::RegisterACAPIJavaScriptObject()
 	// --- Selection API ---
 	jsACAPI->AddItem(new JS::Function("GetSelectedElements", [](GS::Ref<JS::Base>) {
 		if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser("[JS] GetSelectedElements()");
-		return ConvertToJavaScriptVariable(SelectionHelper::GetSelectedElements());
+		GS::Array<SelectionHelper::ElementInfo> elements = SelectionHelper::GetSelectedElements();
+		if (BrowserRepl::HasInstance()) {
+			BrowserRepl::GetInstance().LogToBrowser(GS::UniString::Printf("[C++] GetSelectedElements вернул %d элементов", (int)elements.GetSize()));
+			for (UIndex i = 0; i < elements.GetSize(); ++i) {
+				BrowserRepl::GetInstance().LogToBrowser(GS::UniString::Printf("[C++] Элемент %d: GUID=%s, Type=%s, ID=%s, Layer=%s", 
+					(int)i, elements[i].guidStr.ToCStr().Get(), elements[i].typeName.ToCStr().Get(), 
+					elements[i].elemID.ToCStr().Get(), elements[i].layerName.ToCStr().Get()));
+			}
+		}
+		return ConvertToJavaScriptVariable(elements);
 		}));
 
 	jsACAPI->AddItem(new JS::Function("AddElementToSelection", [](GS::Ref<JS::Base> param) {
@@ -228,6 +239,40 @@ void BrowserRepl::RegisterACAPIJavaScriptObject()
 		const GS::UniString baseID = GetStringFromJavaScriptVariable(param);
 		if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser("[JS] ChangeSelectedElementsID " + baseID);
 		const bool success = SelectionHelper::ChangeSelectedElementsID(baseID);
+		return ConvertToJavaScriptVariable(success);
+		}));
+
+	jsACAPI->AddItem(new JS::Function("CreateLayerAndMoveElements", [](GS::Ref<JS::Base> param) {
+		if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser("[JS] CreateLayerAndMoveElements");
+		
+		// Парсим параметры из JavaScript строки (передаем как JSON строку)
+		LayerHelper::LayerCreationParams params;
+		
+		GS::UniString jsonStr = GetStringFromJavaScriptVariable(param);
+		if (BrowserRepl::HasInstance()) {
+			BrowserRepl::GetInstance().LogToBrowser("[C++] JSON строка: " + jsonStr);
+		}
+		
+		// Простой парсинг JSON (папка|слой|ID)
+		GS::Array<GS::UniString> parts;
+		jsonStr.Split(GS::UniString("|"), [&parts](const GS::UniString& part) {
+			parts.Push(part);
+		});
+		
+		if (parts.GetSize() >= 3) {
+			params.folderPath = parts[0];
+			params.layerName = parts[1];
+			params.baseID = parts[2];
+		}
+		
+		if (BrowserRepl::HasInstance()) {
+			BrowserRepl::GetInstance().LogToBrowser(GS::UniString::Printf("[C++] Создание слоя: папка='%s', слой='%s', ID='%s'", 
+				params.folderPath.ToCStr().Get(), 
+				params.layerName.ToCStr().Get(), 
+				params.baseID.ToCStr().Get()));
+		}
+		
+		const bool success = LayerHelper::CreateLayerAndMoveElements(params);
 		return ConvertToJavaScriptVariable(success);
 		}));
 
