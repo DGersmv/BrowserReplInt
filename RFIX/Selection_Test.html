@@ -301,7 +301,11 @@
         // мост ждёт folder|layer (без baseID)
         const params = folderPath + '|' + layerName;
 
+        AddLog('[JS] CreateLayerAndMoveElements');
+        AddLog('[JS] Параметры: ' + params);
+        
         A.CreateLayerAndMoveElements(params).then(function(success) {
+          AddLog('[JS] CreateLayerAndMoveElements вернул: ' + success);
           if (success) {
             AddLog('[UI] ✅ Папка/слой созданы, элементы перенесены!');
             setInfo("info-layers", "✅ Успешно! Папка: " + folderPath + ", Слой: " + layerName);

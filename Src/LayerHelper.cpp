@@ -38,15 +38,17 @@ GS::Array<GS::UniString> ParseFolderPath(const GS::UniString& folderPath)
     return pathParts;
 }
 
-// ---------------- Создать папку для слоев ----------------
-bool CreateLayerFolder(const GS::UniString& folderPath)
+// ---------------- Создать папку для слоев ---------------- 
+bool CreateLayerFolder(const GS::UniString& folderPath, GS::Guid& folderGuid)
 {
     if (folderPath.IsEmpty()) {
+        folderGuid = GS::Guid(); // Пустой GUID для корневой папки
         return true; // Корневая папка уже существует
     }
 
     GS::Array<GS::UniString> pathParts = ParseFolderPath(folderPath);
     if (pathParts.IsEmpty()) {
+        folderGuid = GS::Guid();
         return true;
     }
 
@@ -56,11 +58,6 @@ bool CreateLayerFolder(const GS::UniString& folderPath)
     for (UIndex i = 0; i < pathParts.GetSize(); ++i) {
         currentPath.Push(pathParts[i]);
         
-        // Создаем папку для слоев
-        API_AttributeFolder folder = {};
-        folder.typeID = API_LayerID;
-        folder.path = currentPath;
-        
         // Проверяем, существует ли папка
         API_AttributeFolder existingFolder = {};
         existingFolder.typeID = API_LayerID;
@@ -69,23 +66,96 @@ bool CreateLayerFolder(const GS::UniString& folderPath)
         
         if (err != NoError) {
             // Папка не существует, создаем её
+            API_AttributeFolder folder = {};
+            folder.typeID = API_LayerID;
+            folder.path = currentPath;
+            
             err = ACAPI_Attribute_CreateFolder(folder);
             if (err != NoError) {
-                ACAPI_WriteReport("[LayerHelper] Ошибка создания папки: %s", true, folderPath.ToCStr().Get());
+                ACAPI_WriteReport("[LayerHelper] Ошибка создания папки '%s' (код: %d)", true, 
+                    GS::UniString::Printf("%s", currentPath[0].ToCStr().Get()).ToCStr().Get(), err);
                 return false;
             }
-            ACAPI_WriteReport("[LayerHelper] Создана папка: %s", false, folderPath.ToCStr().Get());
+            ACAPI_WriteReport("[LayerHelper] Создана папка: %s", false, 
+                GS::UniString::Printf("%s", currentPath[0].ToCStr().Get()).ToCStr().Get());
+            
+            // Используем GUID созданной папки
+            folderGuid = folder.guid;
+            ACAPI_WriteReport("[LayerHelper] GUID созданной папки получен", false);
+            ACAPI_WriteReport("[LayerHelper] Папка создана успешно, GUID не пустой: %s", false, 
+                (folderGuid != GS::Guid()) ? "да" : "нет");
+        } else {
+            // Папка существует, используем её GUID
+            folderGuid = existingFolder.guid;
+            ACAPI_WriteReport("[LayerHelper] Папка уже существует: %s", false, 
+                GS::UniString::Printf("%s", currentPath[0].ToCStr().Get()).ToCStr().Get());
         }
     }
 
     return true;
 }
 
-// ---------------- Создать слой в указанной папке ----------------
+// ---------------- Найти слой по имени, вернуть его индекс (0 если не найден) ----------------
+static API_AttributeIndex FindLayerByName(const GS::UniString& layerName)
+{
+    API_AttributeIndex foundIndex = APIInvalidAttributeIndex;
+
+    // Получаем количество слоев
+    GS::UInt32 layerCount = 0;
+    if (ACAPI_Attribute_GetNum(API_LayerID, layerCount) != NoError || layerCount == 0)
+        return foundIndex;
+
+    // Перебираем все слои и ищем совпадение по имени
+    for (Int32 i = 1; i <= static_cast<Int32>(layerCount); ++i) {
+        API_Attribute attr = {};
+        attr.header.typeID = API_LayerID;
+        attr.header.index = ACAPI_CreateAttributeIndex(i);
+        if (ACAPI_Attribute_Get(&attr) != NoError)
+            continue;
+
+        if (GS::UniString(attr.header.name) == layerName) {
+            foundIndex = ACAPI_CreateAttributeIndex(i);
+            break;
+        }
+    }
+
+    return foundIndex;
+}
+
+// ---------------- Создать слой в указанной папке ---------------- 
 bool CreateLayer(const GS::UniString& folderPath, const GS::UniString& layerName, API_AttributeIndex& layerIndex)
 {
+    // Если имя слоя совпадает с именем папки, или слой с таким именем уже существует —
+    // не создаём новый слой, а только переносим существующий в указанную папку
+    if (!layerName.IsEmpty() && (layerName == folderPath)) {
+        ACAPI_WriteReport("[LayerHelper] Имя слоя совпадает с именем папки: '%s' — пропускаем создание", false, layerName.ToCStr().Get());
+        API_AttributeIndex existingIdx = FindLayerByName(layerName);
+        if (existingIdx.IsPositive()) {
+            layerIndex = existingIdx;
+            if (!folderPath.IsEmpty()) {
+                ACAPI_WriteReport("[LayerHelper] Переносим существующий слой '%s' в папку '%s'", false, layerName.ToCStr().Get(), folderPath.ToCStr().Get());
+                MoveLayerToFolder(layerIndex, folderPath);
+            }
+            return true;
+        }
+        // Если слоя с таким именем не нашли — продолжим обычное создание ниже
+    } else {
+        // Даже если имена не совпадают, стоит проверить существование слоя с таким именем,
+        // чтобы избежать ошибки создания дубликата
+        API_AttributeIndex existingIdx = FindLayerByName(layerName);
+        if (existingIdx.IsPositive()) {
+            ACAPI_WriteReport("[LayerHelper] Слой '%s' уже существует — используем его и переносим при необходимости", false, layerName.ToCStr().Get());
+            layerIndex = existingIdx;
+            if (!folderPath.IsEmpty()) {
+                MoveLayerToFolder(layerIndex, folderPath);
+            }
+            return true;
+        }
+    }
+
     // Сначала создаем папку, если нужно
-    if (!CreateLayerFolder(folderPath)) {
+    GS::Guid folderGuid;
+    if (!CreateLayerFolder(folderPath, folderGuid)) {
         return false;
     }
 
@@ -97,12 +167,10 @@ bool CreateLayer(const GS::UniString& folderPath, const GS::UniString& layerName
     // Устанавливаем свойства слоя (только основные поля)
     layer.layer.conClassId = 1; // Класс соединения по умолчанию
 
-    // Устанавливаем путь к папке для слоя
-    if (!folderPath.IsEmpty()) {
-        GS::Array<GS::UniString> pathParts = ParseFolderPath(folderPath);
-        layer.header.path = pathParts;
-    }
+    // Создаем слой в корне (папка будет назначена позже через MoveLayerToFolder)
+    ACAPI_WriteReport("[LayerHelper] Создаем слой в корне", false);
 
+    // Создаем слой
     GSErrCode err = ACAPI_Attribute_Create(&layer, nullptr);
     if (err != NoError) {
         ACAPI_WriteReport("[LayerHelper] Ошибка создания слоя: %s", true, layerName.ToCStr().Get());
@@ -110,6 +178,15 @@ bool CreateLayer(const GS::UniString& folderPath, const GS::UniString& layerName
     }
 
     layerIndex = layer.header.index;
+    
+    // Перемещаем слой в папку, если папка указана
+    if (!folderPath.IsEmpty()) {
+        ACAPI_WriteReport("[LayerHelper] Пытаемся переместить слой в папку: %s", false, folderPath.ToCStr().Get());
+        if (!MoveLayerToFolder(layerIndex, folderPath)) {
+            ACAPI_WriteReport("[LayerHelper] Предупреждение: не удалось переместить слой в папку", false);
+        }
+    }
+    
     ACAPI_WriteReport("[LayerHelper] Создан слой: %s в папке: %s", false, layerName.ToCStr().Get(), folderPath.ToCStr().Get());
     return true;
 }
@@ -236,5 +313,82 @@ bool CreateLayerAndMoveElements(const LayerCreationParams& params)
 
     return err == NoError;
 }
+
+// ---------------- Переместить слой в папку ---------------- 
+bool MoveLayerToFolder(API_AttributeIndex layerIndex, const GS::UniString& folderPath)
+{
+    if (folderPath.IsEmpty()) {
+        return true; // Корневая папка
+    }
+
+    // Гарантируем существование папки и получаем её GUID
+    GS::Guid folderGuid;
+    if (!CreateLayerFolder(folderPath, folderGuid)) {
+        ACAPI_WriteReport("[LayerHelper] Не удалось подготовить папку для слоя: %s", true, folderPath.ToCStr().Get());
+        return false;
+    }
+
+    // Если GUID пустой — это корень, перемещать не нужно
+    if (folderGuid == GS::Guid()) {
+        return true;
+    }
+
+    // Пытаемся переместить слой в папку через изменение атрибута
+    API_Attribute layer = {};
+    layer.header.typeID = API_LayerID;
+    layer.header.index = layerIndex;
+    
+    GSErrCode err = ACAPI_Attribute_Get(&layer);
+    if (err != NoError) {
+        ACAPI_WriteReport("[LayerHelper] Не удалось получить информацию о слое (код: %d)", true, err);
+        ACAPI_WriteReport("[LayerHelper] Слой остался в корне, но папка создана: %s", false, folderPath.ToCStr().Get());
+        return true;
+    }
+    
+    // Пытаемся переместить слой в папку через ACAPI_Attribute_Move
+    // Сначала получаем GUID слоя
+    API_Attribute currentLayer = {};
+    currentLayer.header.typeID = API_LayerID;
+    currentLayer.header.index = layerIndex;
+    
+    err = ACAPI_Attribute_Get(&currentLayer);
+    if (err != NoError) {
+        ACAPI_WriteReport("[LayerHelper] Ошибка получения слоя для перемещения (код: %d)", true, err);
+        return false;
+    }
+    
+    // Создаем массив GUID атрибутов для перемещения (слой)
+    GS::Array<GS::Guid> attributesToMove;
+    // Попробуем конвертировать API_Guid в GS::Guid
+    GS::UniString guidStr = APIGuidToString(currentLayer.header.guid);
+    GS::Guid layerGuid(guidStr);
+    attributesToMove.Push(layerGuid);
+    
+    // Создаем пустой массив папок (мы не перемещаем папки)
+    GS::Array<API_AttributeFolder> foldersToMove;
+    
+    // Создаем целевую папку
+    API_AttributeFolder targetFolder = {};
+    targetFolder.typeID = API_LayerID;
+    targetFolder.guid = folderGuid;
+    
+    // Перемещаем слой в папку
+    ACAPI_WriteReport("[LayerHelper] Вызываем ACAPI_Attribute_Move...", false);
+    err = ACAPI_Attribute_Move(foldersToMove, attributesToMove, targetFolder);
+    ACAPI_WriteReport("[LayerHelper] ACAPI_Attribute_Move вернул код: %d", false, err);
+    
+    if (err != NoError) {
+        ACAPI_WriteReport("[LayerHelper] Ошибка перемещения слоя в папку '%s' (код: %d, hex: 0x%X)", true, 
+            folderPath.ToCStr().Get(), err, (unsigned int)err);
+        ACAPI_WriteReport("[LayerHelper] Слой остался в корне, но папка создана: %s", false, folderPath.ToCStr().Get());
+    } else {
+        ACAPI_WriteReport("[LayerHelper] Слой успешно перемещен в папку: %s", false, folderPath.ToCStr().Get());
+    }
+    
+    return true;
+}
+
+
+
 
 } // namespace LayerHelper

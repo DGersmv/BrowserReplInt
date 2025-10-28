@@ -15,7 +15,7 @@ namespace LayerHelper {
     };
 
     // Создать папку для слоев
-    bool CreateLayerFolder(const GS::UniString& folderPath);
+    bool CreateLayerFolder(const GS::UniString& folderPath, GS::Guid& folderGuid);
 
     // Создать слой в указанной папке
     bool CreateLayer(const GS::UniString& folderPath, const GS::UniString& layerName, API_AttributeIndex& layerIndex);
@@ -31,6 +31,9 @@ namespace LayerHelper {
 
     // Вспомогательная функция: разбить путь к папке на массив
     GS::Array<GS::UniString> ParseFolderPath(const GS::UniString& folderPath);
+
+    // Переместить слой в папку
+    bool MoveLayerToFolder(API_AttributeIndex layerIndex, const GS::UniString& folderPath);
 
 } // namespace LayerHelper
 
