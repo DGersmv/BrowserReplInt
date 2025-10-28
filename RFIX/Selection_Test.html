@@ -586,6 +586,66 @@
     }
 
     // ================= ПРИЗЕМЛЕНИЕ / СМЕЩЕНИЕ =================
+    async function SetGroundSurfaceUI() {
+      const A = window.ACAPI;
+      if (!A) {
+        AddLog('[UI] ACAPI недоступен');
+        return;
+      }
+
+      AddLog('[UI] Выбор 3D-сетки для приземления');
+      setInfo("info-ground", "Выбор 3D-сетки...");
+
+      if (typeof A.SetGroundSurface === 'function') {
+        try {
+          const success = await A.SetGroundSurface();
+          if (success) {
+            AddLog('[UI] ✅ 3D-сетка выбрана успешно');
+            setInfo("info-ground", "✅ 3D-сетка выбрана. Теперь выберите объекты и нажмите 'Приземлить'");
+          } else {
+            AddLog('[UI] ❌ Ошибка выбора 3D-сетки');
+            setInfo("info-ground", "❌ Ошибка выбора 3D-сетки");
+          }
+        } catch (err) {
+          AddLog('[UI] ❌ Ошибка вызова SetGroundSurface: ' + err);
+          setInfo("info-ground", "❌ Ошибка: " + err);
+        }
+      } else {
+        AddLog('[UI] ❌ Функция SetGroundSurface недоступна');
+        setInfo("info-ground", "❌ Функция недоступна (обновите плагин)");
+      }
+    }
+
+    async function SetGroundObjectsUI() {
+      const A = window.ACAPI;
+      if (!A) {
+        AddLog('[UI] ACAPI недоступен');
+        return;
+      }
+
+      AddLog('[UI] Выбор объектов для приземления');
+      setInfo("info-ground", "Выбор объектов...");
+
+      if (typeof A.SetGroundObjects === 'function') {
+        try {
+          const success = await A.SetGroundObjects();
+          if (success) {
+            AddLog('[UI] ✅ Объекты выбраны успешно');
+            setInfo("info-ground", "✅ Объекты выбраны. Теперь нажмите 'Приземлить'");
+          } else {
+            AddLog('[UI] ❌ Ошибка выбора объектов');
+            setInfo("info-ground", "❌ Ошибка выбора объектов");
+          }
+        } catch (err) {
+          AddLog('[UI] ❌ Ошибка вызова SetGroundObjects: ' + err);
+          setInfo("info-ground", "❌ Ошибка: " + err);
+        }
+      } else {
+        AddLog('[UI] ❌ Функция SetGroundObjects недоступна');
+        setInfo("info-ground", "❌ Функция недоступна (обновите плагин)");
+      }
+    }
+
     async function ApplyZDeltaUI() {
       const A = window.ACAPI;
       if (!A) {
@@ -636,23 +696,39 @@
       AddLog('[UI] Приземление на 3D-сетку');
       setInfo("info-ground", "Приземление на 3D-сетку...");
 
-      if (typeof A.ApplyGroundOffset === 'function') {
-        try {
-          const success = await A.ApplyGroundOffset(0.0);
-          if (success) {
-            AddLog('[UI] ✅ Приземление выполнено успешно');
-            setInfo("info-ground", "✅ Объекты приземлены на 3D-сетку");
-          } else {
-            AddLog('[UI] ❌ Ошибка приземления');
-            setInfo("info-ground", "❌ Ошибка приземления (проверьте выделение и 3D-сетку)");
-          }
-        } catch (err) {
-          AddLog('[UI] ❌ Ошибка вызова ApplyGroundOffset: ' + err);
-          setInfo("info-ground", "❌ Ошибка: " + err);
+      // Сначала автоматически устанавливаем 3D-сетку и объекты из текущего выделения
+      try {
+        // Устанавливаем 3D-сетку
+        AddLog('[UI] Установка 3D-сетки из выделения...');
+        const surfaceSuccess = await A.SetGroundSurface();
+        if (!surfaceSuccess) {
+          AddLog('[UI] ❌ Не удалось установить 3D-сетку');
+          setInfo("info-ground", "❌ Не удалось установить 3D-сетку. Убедитесь, что в выделении есть 3D-сетка");
+          return;
         }
-      } else {
-        AddLog('[UI] ❌ Функция ApplyGroundOffset недоступна');
-        setInfo("info-ground", "❌ Функция недоступна (обновите плагин)");
+
+        // Устанавливаем объекты
+        AddLog('[UI] Установка объектов из выделения...');
+        const objectsSuccess = await A.SetGroundObjects();
+        if (!objectsSuccess) {
+          AddLog('[UI] ❌ Не удалось установить объекты');
+          setInfo("info-ground", "❌ Не удалось установить объекты. Убедитесь, что в выделении есть объекты для приземления");
+          return;
+        }
+
+        // Теперь выполняем приземление
+        AddLog('[UI] Выполнение приземления...');
+        const success = await A.ApplyGroundOffset(0.0);
+        if (success) {
+          AddLog('[UI] ✅ Приземление выполнено успешно');
+          setInfo("info-ground", "✅ Объекты приземлены на 3D-сетку");
+        } else {
+          AddLog('[UI] ❌ Ошибка приземления');
+          setInfo("info-ground", "❌ Ошибка приземления");
+        }
+      } catch (err) {
+        AddLog('[UI] ❌ Ошибка: ' + err);
+        setInfo("info-ground", "❌ Ошибка: " + err);
       }
     }
 
@@ -829,7 +905,11 @@
       </div>
 
       <div id="info-ground" class="info-box">
-        Режимы: «Применить» — просто сдвиг по Z (без mesh). «Приземлить» — посадка на выделенную 3D-сетку (смещение игнорируется).
+        <strong>Инструкция:</strong><br>
+        1. Выделите 3D-сетку и объекты для приземления одновременно<br>
+        2. Нажмите "Приземлить" для посадки объектов на 3D-сетку<br>
+        <br>
+        <strong>Смещение:</strong> "Применить" — просто сдвиг по Z (без 3D-сетки)
       </div>
     </fieldset>
 
@@ -853,20 +933,12 @@
         <input id="btnCreateMarkup" type="button" onclick="whenACAPIReadyDo(CreateMarkupUI)" value="Создать разметку">
       </div>
 
-      <div style="text-align:center; margin-bottom:15px;">
-        <input id="btnDimensionsToLine" type="button" onclick="whenACAPIReadyDo(CreateDimensionsToLineUI)" value="Размеры к линии">
-      </div>
-
-      <div style="text-align:center; margin-bottom:15px;">
-        <input id="btnDimensionsBetween" type="button" onclick="whenACAPIReadyDo(CreateDimensionsBetweenUI)" value="Размеры между объектами">
-      </div>
-
-      <div style="text-align:center; margin-bottom:15px;">
-        <input id="btnDimensionsToPoint" type="button" onclick="whenACAPIReadyDo(CreateDimensionsToPointUI)" value="Размеры к точке">
-      </div>
-
       <div id="info-markup" class="info-box">
-        Установите шаг разметки и выберите нужный тип размеров. Для создания размеров между объектами сначала выделите два объекта.
+        <strong>Инструкция:</strong><br>
+        1. Установите шаг разметки (например, 1000 мм)<br>
+        2. Нажмите "Установить" для применения шага<br>
+        3. Выделите объекты для разметки<br>
+        4. Нажмите "Создать разметку"
       </div>
     </fieldset>
 
