@@ -426,10 +426,164 @@
     }
 
     // ================= РАЗМЕТКА/РАЗМЕРЫ =================
-    function CreateMarkup() { /* ... как у тебя выше ... */ }
-    function CreateDimensionsToLine() { /* ... */ }
-    function CreateDimensionsBetweenObjects() { /* ... */ }
-    function CreateDimensionsToPoint() { /* ... */ }
+    async function SetMarkupStepUI() {
+      const A = window.ACAPI;
+      if (!A) {
+        AddLog('[UI] ACAPI недоступен');
+        return;
+      }
+
+      const stepStr = document.getElementById('markupStep').value;
+      const stepMm = parseFloat(stepStr);
+      
+      if (isNaN(stepMm) || stepMm <= 0) {
+        AddLog('[UI] Неверное значение шага разметки');
+        setInfo("info-markup", "❌ Неверное значение шага разметки");
+        return;
+      }
+
+      AddLog('[UI] Установка шага разметки: ' + stepMm + ' мм');
+      setInfo("info-markup", "Установка шага разметки...");
+
+      if (typeof A.SetMarkupStep === 'function') {
+        try {
+          const success = await A.SetMarkupStep(stepMm);
+          if (success) {
+            AddLog('[UI] ✅ Шаг разметки установлен: ' + stepMm + ' мм');
+            setInfo("info-markup", "✅ Шаг разметки установлен: " + stepMm + " мм");
+          } else {
+            AddLog('[UI] ❌ Ошибка установки шага разметки');
+            setInfo("info-markup", "❌ Ошибка установки шага разметки");
+          }
+        } catch (err) {
+          AddLog('[UI] ❌ Ошибка вызова SetMarkupStep: ' + err);
+          setInfo("info-markup", "❌ Ошибка: " + err);
+        }
+      } else {
+        AddLog('[UI] ❌ Функция SetMarkupStep недоступна');
+        setInfo("info-markup", "❌ Функция недоступна (обновите плагин)");
+      }
+    }
+
+    async function CreateMarkupUI() {
+      const A = window.ACAPI;
+      if (!A) {
+        AddLog('[UI] ACAPI недоступен');
+        return;
+      }
+
+      AddLog('[UI] Создание разметки');
+      setInfo("info-markup", "Создание разметки...");
+
+      if (typeof A.CreateMarkupDimensions === 'function') {
+        try {
+          const success = await A.CreateMarkupDimensions();
+          if (success) {
+            AddLog('[UI] ✅ Разметка создана успешно');
+            setInfo("info-markup", "✅ Разметка создана успешно");
+          } else {
+            AddLog('[UI] ❌ Ошибка создания разметки');
+            setInfo("info-markup", "❌ Ошибка создания разметки");
+          }
+        } catch (err) {
+          AddLog('[UI] ❌ Ошибка вызова CreateMarkupDimensions: ' + err);
+          setInfo("info-markup", "❌ Ошибка: " + err);
+        }
+      } else {
+        AddLog('[UI] ❌ Функция CreateMarkupDimensions недоступна');
+        setInfo("info-markup", "❌ Функция недоступна (обновите плагин)");
+      }
+    }
+
+    async function CreateDimensionsToLineUI() {
+      const A = window.ACAPI;
+      if (!A) {
+        AddLog('[UI] ACAPI недоступен');
+        return;
+      }
+
+      AddLog('[UI] Создание размеров к линии');
+      setInfo("info-markup", "Создание размеров к линии...");
+
+      if (typeof A.CreateDimensionsToLine === 'function') {
+        try {
+          const success = await A.CreateDimensionsToLine();
+          if (success) {
+            AddLog('[UI] ✅ Размеры к линии созданы успешно');
+            setInfo("info-markup", "✅ Размеры к линии созданы успешно");
+          } else {
+            AddLog('[UI] ❌ Ошибка создания размеров к линии');
+            setInfo("info-markup", "❌ Ошибка создания размеров к линии");
+          }
+        } catch (err) {
+          AddLog('[UI] ❌ Ошибка вызова CreateDimensionsToLine: ' + err);
+          setInfo("info-markup", "❌ Ошибка: " + err);
+        }
+      } else {
+        AddLog('[UI] ❌ Функция CreateDimensionsToLine недоступна');
+        setInfo("info-markup", "❌ Функция недоступна (обновите плагин)");
+      }
+    }
+
+    async function CreateDimensionsBetweenUI() {
+      const A = window.ACAPI;
+      if (!A) {
+        AddLog('[UI] ACAPI недоступен');
+        return;
+      }
+
+      AddLog('[UI] Создание размеров между объектами');
+      setInfo("info-markup", "Создание размеров между объектами...");
+
+      if (typeof A.CreateDimensionsBetweenObjects === 'function') {
+        try {
+          const success = await A.CreateDimensionsBetweenObjects();
+          if (success) {
+            AddLog('[UI] ✅ Размеры между объектами созданы успешно');
+            setInfo("info-markup", "✅ Размеры между объектами созданы успешно");
+          } else {
+            AddLog('[UI] ❌ Ошибка создания размеров между объектами');
+            setInfo("info-markup", "❌ Ошибка создания размеров между объектами");
+          }
+        } catch (err) {
+          AddLog('[UI] ❌ Ошибка вызова CreateDimensionsBetweenObjects: ' + err);
+          setInfo("info-markup", "❌ Ошибка: " + err);
+        }
+      } else {
+        AddLog('[UI] ❌ Функция CreateDimensionsBetweenObjects недоступна');
+        setInfo("info-markup", "❌ Функция недоступна (обновите плагин)");
+      }
+    }
+
+    async function CreateDimensionsToPointUI() {
+      const A = window.ACAPI;
+      if (!A) {
+        AddLog('[UI] ACAPI недоступен');
+        return;
+      }
+
+      AddLog('[UI] Создание размеров к точке');
+      setInfo("info-markup", "Создание размеров к точке...");
+
+      if (typeof A.CreateDimensionsToPoint === 'function') {
+        try {
+          const success = await A.CreateDimensionsToPoint();
+          if (success) {
+            AddLog('[UI] ✅ Размеры к точке созданы успешно');
+            setInfo("info-markup", "✅ Размеры к точке созданы успешно");
+          } else {
+            AddLog('[UI] ❌ Ошибка создания размеров к точке');
+            setInfo("info-markup", "❌ Ошибка создания размеров к точке");
+          }
+        } catch (err) {
+          AddLog('[UI] ❌ Ошибка вызова CreateDimensionsToPoint: ' + err);
+          setInfo("info-markup", "❌ Ошибка: " + err);
+        }
+      } else {
+        AddLog('[UI] ❌ Функция CreateDimensionsToPoint недоступна');
+        setInfo("info-markup", "❌ Функция недоступна (обновите плагин)");
+      }
+    }
 
     // ================= ПРИЗЕМЛЕНИЕ / СМЕЩЕНИЕ =================
     async function ApplyZDeltaUI() {
@@ -540,6 +694,9 @@
       document.getElementById('baseID')      ?.addEventListener('keydown', e => { if (e.key === 'Enter') changeAllSelectedIDs(); });
       document.getElementById('layerFolder') ?.addEventListener('keydown', e => { if (e.key === 'Enter') createLayerAndMoveElements(); });
       document.getElementById('layerName')   ?.addEventListener('keydown', e => { if (e.key === 'Enter') createLayerAndMoveElements(); });
+      
+      // Enter для разметки
+      document.getElementById('markupStep')  ?.addEventListener('keydown', e => { if (e.key === 'Enter') whenACAPIReadyDo(SetMarkupStepUI); });
 
       // help-кнопки (делегирование)
       document.addEventListener('click', function (e) {
@@ -683,8 +840,36 @@
 
   <!-- Разметка -->
   <div id="tab-markup" class="tabcontent">
-    <!-- (оставляем твои четыре блока разметки / размеров без изменений) -->
-    <!-- ... -->
+    <fieldset class="control-block">
+      <legend>Размеры и разметка</legend>
+
+      <div style="text-align:center; margin-bottom:15px;">
+        <label>Шаг разметки (мм):</label>
+        <input type="number" id="markupStep" step="1" value="1000" min="1">
+        <input id="btnSetMarkupStep" type="button" onclick="whenACAPIReadyDo(SetMarkupStepUI)" value="Установить">
+      </div>
+
+      <div style="text-align:center; margin-bottom:15px;">
+        <input id="btnCreateMarkup" type="button" onclick="whenACAPIReadyDo(CreateMarkupUI)" value="Создать разметку">
+      </div>
+
+      <div style="text-align:center; margin-bottom:15px;">
+        <input id="btnDimensionsToLine" type="button" onclick="whenACAPIReadyDo(CreateDimensionsToLineUI)" value="Размеры к линии">
+      </div>
+
+      <div style="text-align:center; margin-bottom:15px;">
+        <input id="btnDimensionsBetween" type="button" onclick="whenACAPIReadyDo(CreateDimensionsBetweenUI)" value="Размеры между объектами">
+      </div>
+
+      <div style="text-align:center; margin-bottom:15px;">
+        <input id="btnDimensionsToPoint" type="button" onclick="whenACAPIReadyDo(CreateDimensionsToPointUI)" value="Размеры к точке">
+      </div>
+
+      <div id="info-markup" class="info-box">
+        Установите шаг разметки и выберите нужный тип размеров. Для создания размеров между объектами сначала выделите два объекта.
+      </div>
+    </fieldset>
+
     <button class="tab-help"
             data-help-url="https://landscape.227.info/help/dimensions"
             data-help-title="Справка: Разметка">Помощь</button>
