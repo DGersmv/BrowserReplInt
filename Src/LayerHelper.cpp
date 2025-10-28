@@ -217,10 +217,14 @@ bool CreateLayerAndMoveElements(const LayerCreationParams& params)
             return APIERR_GENERAL;
         }
 
-        // 3. Изменяем ID элементов
-        if (!ChangeSelectedElementsID(params.baseID)) {
-            ACAPI_WriteReport("[LayerHelper] Ошибка изменения ID элементов", true);
-            return APIERR_GENERAL;
+        // 3. Изменяем ID элементов (только если baseID не пустой)
+        if (!params.baseID.IsEmpty()) {
+            if (!ChangeSelectedElementsID(params.baseID)) {
+                ACAPI_WriteReport("[LayerHelper] Ошибка изменения ID элементов", true);
+                return APIERR_GENERAL;
+            }
+        } else {
+            ACAPI_WriteReport("[LayerHelper] ID элементов не изменяются (baseID пустой)", false);
         }
 
         ACAPI_WriteReport("[LayerHelper] Операция завершена успешно", false);

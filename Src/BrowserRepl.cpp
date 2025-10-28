@@ -253,16 +253,16 @@ void BrowserRepl::RegisterACAPIJavaScriptObject()
 			BrowserRepl::GetInstance().LogToBrowser("[C++] JSON строка: " + jsonStr);
 		}
 		
-		// Простой парсинг JSON (папка|слой|ID)
+		// Простой парсинг JSON (папка|слой)
 		GS::Array<GS::UniString> parts;
 		jsonStr.Split(GS::UniString("|"), [&parts](const GS::UniString& part) {
 			parts.Push(part);
 		});
 		
-		if (parts.GetSize() >= 3) {
+		if (parts.GetSize() >= 2) {
 			params.folderPath = parts[0];
 			params.layerName = parts[1];
-			params.baseID = parts[2];
+			params.baseID = GS::UniString(""); // ID не меняем
 		}
 		
 		if (BrowserRepl::HasInstance()) {
