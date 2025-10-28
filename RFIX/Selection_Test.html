@@ -432,8 +432,75 @@
     function CreateDimensionsToPoint() { /* ... */ }
 
     // ================= ПРИЗЕМЛЕНИЕ / СМЕЩЕНИЕ =================
-    async function ApplyZDeltaUI() { /* ... как у тебя выше ... */ }
-    async function LandToMeshUI() { /* ... как у тебя выше ... */ }
+    async function ApplyZDeltaUI() {
+      const A = window.ACAPI;
+      if (!A) {
+        AddLog('[UI] ACAPI недоступен');
+        return;
+      }
+
+      const offsetStr = document.getElementById('groundOffset').value;
+      const offsetMm = parseFloat(offsetStr);
+      
+      if (isNaN(offsetMm)) {
+        AddLog('[UI] Неверное значение смещения');
+        setInfo("info-ground", "❌ Неверное значение смещения");
+        return;
+      }
+
+      const offsetM = offsetMm / 1000.0;
+      AddLog('[UI] Применение смещения Z: ' + offsetMm + ' мм (' + offsetM + ' м)');
+      setInfo("info-ground", "Применение смещения...");
+
+      if (typeof A.ApplyZDelta === 'function') {
+        try {
+          const success = await A.ApplyZDelta(offsetM);
+          if (success) {
+            AddLog('[UI] ✅ Смещение применено успешно');
+            setInfo("info-ground", "✅ Смещение применено: " + offsetMm + " мм");
+          } else {
+            AddLog('[UI] ❌ Ошибка применения смещения');
+            setInfo("info-ground", "❌ Ошибка применения смещения");
+          }
+        } catch (err) {
+          AddLog('[UI] ❌ Ошибка вызова ApplyZDelta: ' + err);
+          setInfo("info-ground", "❌ Ошибка: " + err);
+        }
+      } else {
+        AddLog('[UI] ❌ Функция ApplyZDelta недоступна');
+        setInfo("info-ground", "❌ Функция недоступна (обновите плагин)");
+      }
+    }
+
+    async function LandToMeshUI() {
+      const A = window.ACAPI;
+      if (!A) {
+        AddLog('[UI] ACAPI недоступен');
+        return;
+      }
+
+      AddLog('[UI] Приземление на 3D-сетку');
+      setInfo("info-ground", "Приземление на 3D-сетку...");
+
+      if (typeof A.ApplyGroundOffset === 'function') {
+        try {
+          const success = await A.ApplyGroundOffset(0.0);
+          if (success) {
+            AddLog('[UI] ✅ Приземление выполнено успешно');
+            setInfo("info-ground", "✅ Объекты приземлены на 3D-сетку");
+          } else {
+            AddLog('[UI] ❌ Ошибка приземления');
+            setInfo("info-ground", "❌ Ошибка приземления (проверьте выделение и 3D-сетку)");
+          }
+        } catch (err) {
+          AddLog('[UI] ❌ Ошибка вызова ApplyGroundOffset: ' + err);
+          setInfo("info-ground", "❌ Ошибка: " + err);
+        }
+      } else {
+        AddLog('[UI] ❌ Функция ApplyGroundOffset недоступна');
+        setInfo("info-ground", "❌ Функция недоступна (обновите плагин)");
+      }
+    }
 
     function onShift(mm) {
       const m = parseFloat(mm) / 1000;
