@@ -97,8 +97,11 @@ bool CreateLayer(const GS::UniString& folderPath, const GS::UniString& layerName
     // Устанавливаем свойства слоя (только основные поля)
     layer.layer.conClassId = 1; // Класс соединения по умолчанию
 
-    // Примечание: папки для слоев создаются отдельно через ACAPI_Attribute_CreateFolder
-    // Слой будет создан в корне, а папка уже создана выше
+    // Устанавливаем путь к папке для слоя
+    if (!folderPath.IsEmpty()) {
+        GS::Array<GS::UniString> pathParts = ParseFolderPath(folderPath);
+        layer.header.path = pathParts;
+    }
 
     GSErrCode err = ACAPI_Attribute_Create(&layer, nullptr);
     if (err != NoError) {
