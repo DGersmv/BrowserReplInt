@@ -551,9 +551,7 @@
       step?.addEventListener('keydown', e => { if (e.key === 'Enter') SetDistributionStep(); });
       cnt ?.addEventListener('keydown',  e => { if (e.key === 'Enter') SetDistributionCount(); });
       
-      // Enter для поля изменения ID
-      const baseID = document.getElementById('baseID');
-      baseID?.addEventListener('keydown', e => { if (e.key === 'Enter') changeAllSelectedIDs(); });
+      // Enter для поля изменения ID - перенесено в вкладку "Слои (ID)"
 
       // Enter по смещению — как «Применить» (ΔZ)
       const offset = document.getElementById('groundOffset');
@@ -616,19 +614,7 @@
     <tbody id="selection"><tr><td colspan="3">Нет выбранных элементов</td></tr></tbody>
   </table>
 
-  <!-- Форма изменения ID -->
-  <fieldset class="control-block" style="margin-bottom: 20px; position: relative; padding-bottom: 50px;">
-    <legend>Изменение ID элементов</legend>
-    <label for="baseID">Базовое название:</label>
-    <input type="text" id="baseID" placeholder="Например: Сосна обыкновенная" style="width: 200px; padding: 3px; margin: 3px 0;" />
-    <br>
-    <input type="button" value="Изменить ID всех выбранных элементов" onclick="changeAllSelectedIDs()" style="margin-top: 10px;" />
-    <div class="info-box" id="id-change-info">Введите базовое название и нажмите кнопку. Все выбранные элементы получат ID с порядковыми номерами (например: Сосна обыкновенная-01, Сосна обыкновенная-02...)</div>
-    
-    <button class="tab-help"
-            data-help-url="https://landscape.227.info/help/selection"
-            data-help-title="Справка: Выбор элементов">Помощь</button>
-  </fieldset>
+  <!-- Форма изменения ID перенесена в вкладку "Слои (ID)" -->
 
   <!-- Вкладки -->
   <div class="tabs">
