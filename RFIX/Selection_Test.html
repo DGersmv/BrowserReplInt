@@ -666,6 +666,22 @@
       AddLog('[UI] Применение смещения Z: ' + offsetMm + ' мм (' + offsetM + ' м)');
       setInfo("info-ground", "Применение смещения...");
 
+      // Захватываем текущие объекты из выделения, чтобы смещение точно применилось
+      if (typeof A.SetGroundObjects === 'function') {
+        try {
+          const okSet = await A.SetGroundObjects();
+          if (!okSet) {
+            AddLog('[UI] ❌ Объекты не установлены из выделения');
+            setInfo("info-ground", "❌ Выделите объекты и повторите");
+            return;
+          }
+        } catch (err) {
+          AddLog('[UI] ❌ Ошибка вызова SetGroundObjects: ' + err);
+          setInfo("info-ground", "❌ Ошибка: " + err);
+          return;
+        }
+      }
+
       if (typeof A.ApplyZDelta === 'function') {
         try {
           const success = await A.ApplyZDelta(offsetM);
@@ -674,7 +690,7 @@
             setInfo("info-ground", "✅ Смещение применено: " + offsetMm + " мм");
           } else {
             AddLog('[UI] ❌ Ошибка применения смещения');
-            setInfo("info-ground", "❌ Ошибка применения смещения");
+            setInfo("info-ground", "❌ Ошибка применения смещения (проверьте выделение)");
           }
         } catch (err) {
           AddLog('[UI] ❌ Ошибка вызова ApplyZDelta: ' + err);
