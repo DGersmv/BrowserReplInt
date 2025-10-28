@@ -295,8 +295,7 @@ namespace RoadHelper {
     }
 
     // 1) Собираем список XY-точек оси как ломаную
-    //    Мы не заморачиваемся дугами и безье — просто берём coords из мемо
-    //    или для Line: начало-конец
+    //    Для дуг генерируем точки по окружности
     static bool CollectAxisPoints2D(const API_Guid& guid, GS::Array<API_Coord>& outPts)
     {
         outPts.Clear();
@@ -315,8 +314,54 @@ namespace RoadHelper {
             break;
         }
 
-        case API_ArcID:
-        case API_CircleID:
+        case API_ArcID: {
+            // Для дуги генерируем точки по окружности
+            const API_Coord center = el.arc.origC;
+            const double radius = el.arc.r;
+            const double startAngle = el.arc.begAng;
+            const double endAngle = el.arc.endAng;
+            
+            // Вычисляем количество точек для дуги (минимум 8, максимум 64)
+            double sweep = endAngle - startAngle;
+            while (sweep <= -2.0 * kPI) sweep += 2.0 * kPI;
+            while (sweep > 2.0 * kPI) sweep -= 2.0 * kPI;
+            
+            const double absSweep = std::abs(sweep);
+            const int numPoints = std::max(8, std::min(64, (int)(absSweep * 16.0 / kPI)));
+            
+            for (int i = 0; i <= numPoints; ++i) {
+                const double t = (double)i / (double)numPoints;
+                const double angle = startAngle + t * sweep;
+                const API_Coord pt = {
+                    center.x + radius * std::cos(angle),
+                    center.y + radius * std::sin(angle)
+                };
+                outPts.Push(pt);
+            }
+            
+            Log("[RoadHelper] CollectAxisPoints2D: сгенерировано %u точек для дуги", (unsigned)outPts.GetSize());
+            break;
+        }
+
+        case API_CircleID: {
+            // Для круга генерируем точки по окружности
+            const API_Coord center = el.circle.origC;
+            const double radius = el.circle.r;
+            
+            const int numPoints = 32; // фиксированное количество точек для круга
+            for (int i = 0; i < numPoints; ++i) {
+                const double angle = 2.0 * kPI * (double)i / (double)numPoints;
+                const API_Coord pt = {
+                    center.x + radius * std::cos(angle),
+                    center.y + radius * std::sin(angle)
+                };
+                outPts.Push(pt);
+            }
+            
+            Log("[RoadHelper] CollectAxisPoints2D: сгенерировано %u точек для круга", (unsigned)outPts.GetSize());
+            break;
+        }
+
         case API_PolyLineID:
         case API_SplineID: {
             API_ElementMemo memo = {};
@@ -588,6 +633,37 @@ namespace RoadHelper {
         Log("[RoadHelper] Универсальный алгоритм: %s линия, точек=%u", 
             isClosed ? "замкнутая" : "открытая", (unsigned)centerPts.GetSize());
 
+        // Для дуг и кругов используем специальный алгоритм с построением перпендикуляров
+        API_Element el = {};
+        el.header.guid = sourceGuid;
+        if (ACAPI_Element_Get(&el) == NoError && 
+            (el.header.type.typeID == API_ArcID || el.header.type.typeID == API_CircleID)) {
+            
+            // Используем алгоритм с перпендикулярами для дуг
+            GS::Array<API_Coord> leftPts, rightPts;
+            if (!BuildPerpendicularPoints(centerPts, halfWidthM, leftPts, rightPts)) {
+                Log("[RoadHelper] ERROR: не удалось построить перпендикуляры для дуги");
+                return false;
+            }
+            
+            // Создаем сплайны из точек
+            leftGuid = CreateSplineFromPts(leftPts);
+            rightGuid = CreateSplineFromPts(rightPts);
+            
+            if (leftGuid == APINULLGuid || rightGuid == APINULLGuid) {
+                Log("[RoadHelper] ERROR: не удалось создать сплайны для дуги");
+                return false;
+            }
+            
+            Log("[RoadHelper] Универсальный алгоритм: созданы сплайны для дуги L=%s R=%s (ширина=%.3fм)", 
+                APIGuidToString(leftGuid).ToCStr().Get(),
+                APIGuidToString(rightGuid).ToCStr().Get(),
+                halfWidthM * 2.0);
+            
+            return true;
+        }
+
+        // Для остальных типов линий используем копирование с смещением
         // Определяем направление перпендикуляра
         double nx = 0.0, ny = 0.0;
         
@@ -645,8 +721,8 @@ namespace RoadHelper {
     }
 
     // Функция построения перпендикуляров для получения двух рядов точек
-    static bool BuildPerpendicularPoints(const GS::Array<API_Coord>& centerPts, double halfWidthM, 
-                                       GS::Array<API_Coord>& leftPts, GS::Array<API_Coord>& rightPts)
+    bool BuildPerpendicularPoints(const GS::Array<API_Coord>& centerPts, double halfWidthM, 
+                                 GS::Array<API_Coord>& leftPts, GS::Array<API_Coord>& rightPts)
     {
         leftPts.Clear();
         rightPts.Clear();

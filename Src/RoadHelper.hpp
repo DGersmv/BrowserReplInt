@@ -32,6 +32,10 @@ namespace RoadHelper {
 	// Основная команда
 	bool BuildRoad (const RoadParams& params);
 
+	// Вспомогательные функции для построения перпендикуляров
+	bool BuildPerpendicularPoints(const GS::Array<API_Coord>& centerPts, double halfWidthM, 
+	                             GS::Array<API_Coord>& leftPts, GS::Array<API_Coord>& rightPts);
+
 	// ------------------------------------------------------------------
 	// Внутренние структуры (чтобы .cpp мог работать понятно)
 	// ------------------------------------------------------------------
