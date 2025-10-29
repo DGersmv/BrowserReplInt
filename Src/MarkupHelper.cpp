@@ -582,9 +582,13 @@ namespace MarkupHelper {
 	// ============================================================================
 	bool SetMarkupStep(double stepMM)
 	{
-		if (stepMM <= 0.0) { /* Log("Invalid step: must be > 0"); */ return false; }
+		ACAPI_WriteReport("[MarkupHelper] SetMarkupStep called with stepMM=%.6f", false, stepMM);
+		if (stepMM <= 0.0) { 
+			ACAPI_WriteReport("[MarkupHelper] Invalid step: must be > 0", false);
+			return false; 
+		}
 		g_stepMeters = stepMM / 1000.0;
-		// Log(GS::UniString::Printf("Step set: %.1f mm (%.6f m)", stepMM, g_stepMeters));
+		ACAPI_WriteReport("[MarkupHelper] Step set: %.1f mm (%.6f m)", false, stepMM, g_stepMeters);
 		return true;
 	}
 
@@ -652,7 +656,7 @@ namespace MarkupHelper {
 		Vec2 firstHit; double firstTOnLine = -1.0; int sideSign = 0;
 
 		// Ищем первое пересечение, пробуя разные точки на линии направления
-		for (double t = 0.0; t <= lineLength + 1e-9; t += std::max(0.05, g_stepMeters * 0.1)) {
+		for (double t = 0.0; t <= lineLength + 1e-9; t += std::max(0.05, g_stepMeters)) {
 			const Vec2 origin = P1 + direction * t;
 
 			// Проверяем пересечения с контурами всех элементов

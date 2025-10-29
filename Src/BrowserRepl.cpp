@@ -225,29 +225,29 @@ void BrowserRepl::RegisterACAPIJavaScriptObject()
 
 	// --- Selection API ---
 	jsACAPI->AddItem(new JS::Function("GetSelectedElements", [](GS::Ref<JS::Base>) {
-		if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser("[JS] GetSelectedElements()");
+		// if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser("[JS] GetSelectedElements()");
 		GS::Array<SelectionHelper::ElementInfo> elements = SelectionHelper::GetSelectedElements();
-		if (BrowserRepl::HasInstance()) {
-			BrowserRepl::GetInstance().LogToBrowser(GS::UniString::Printf("[C++] GetSelectedElements вернул %d элементов", (int)elements.GetSize()));
-			for (UIndex i = 0; i < elements.GetSize(); ++i) {
-				BrowserRepl::GetInstance().LogToBrowser(GS::UniString::Printf("[C++] Элемент %d: GUID=%s, Type=%s, ID=%s, Layer=%s", 
-					(int)i, elements[i].guidStr.ToCStr().Get(), elements[i].typeName.ToCStr().Get(), 
-					elements[i].elemID.ToCStr().Get(), elements[i].layerName.ToCStr().Get()));
-			}
-		}
+		// if (BrowserRepl::HasInstance()) {
+		//	BrowserRepl::GetInstance().LogToBrowser(GS::UniString::Printf("[C++] GetSelectedElements вернул %d элементов", (int)elements.GetSize()));
+		//	for (UIndex i = 0; i < elements.GetSize(); ++i) {
+		//		BrowserRepl::GetInstance().LogToBrowser(GS::UniString::Printf("[C++] Элемент %d: GUID=%s, Type=%s, ID=%s, Layer=%s", 
+		//			(int)i, elements[i].guidStr.ToCStr().Get(), elements[i].typeName.ToCStr().Get(), 
+		//			elements[i].elemID.ToCStr().Get(), elements[i].layerName.ToCStr().Get()));
+		//	}
+		// }
 		return ConvertToJavaScriptVariable(elements);
 		}));
 
 	jsACAPI->AddItem(new JS::Function("AddElementToSelection", [](GS::Ref<JS::Base> param) {
 		const GS::UniString id = GetStringFromJavaScriptVariable(param);
-		if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser("[JS] AddElementToSelection " + id);
+		// if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser("[JS] AddElementToSelection " + id);
 		SelectionHelper::ModifySelection(id, SelectionHelper::AddToSelection);
 		return ConvertToJavaScriptVariable(true);
 		}));
 
 	jsACAPI->AddItem(new JS::Function("RemoveElementFromSelection", [](GS::Ref<JS::Base> param) {
 		const GS::UniString id = GetStringFromJavaScriptVariable(param);
-		if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser("[JS] RemoveElementFromSelection " + id);
+		// if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser("[JS] RemoveElementFromSelection " + id);
 		SelectionHelper::ModifySelection(id, SelectionHelper::RemoveFromSelection);
 		return ConvertToJavaScriptVariable(true);
 		}));

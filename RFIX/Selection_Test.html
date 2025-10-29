@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <title>Landscape REPL</title>
@@ -7,7 +7,7 @@
   <style>
     body { font-family: Arial, sans-serif; background:#f5f5f5; margin:20px; }
     
-    /* Логотип LANDSCAPE HELPER */
+    /* LANDSCAPE HELPER Logo */
     .logo-container { 
       display: flex; 
       align-items: center; 
@@ -148,7 +148,10 @@
       return v;
     }
 
-    // =============== ожидание моста ACAPI (с диагностикой) ===============
+    // Глобальная переменная для хранения последнего установленного шага разметки
+    let g_lastMarkupStepMm = 2500; // значение по умолчанию
+
+    // =============== ACAPI bridge waiting (with diagnostics) ===============
     function whenACAPIReadyDo(cb) {
       let fired = false;
       const probe = () => {
@@ -170,7 +173,7 @@
         fired = true;
         try {
           const caps = probe();
-          AddLog(`[UI] ACAPI готов: select=${!!caps.hasSelect} ground=${!!caps.hasGround} newΔ=${!!caps.hasNewDlt} oldΔ=${!!caps.hasOldDlt}`);
+          AddLog(`[UI] ACAPI ready: select=${!!caps.hasSelect} ground=${!!caps.hasGround} newΔ=${!!caps.hasNewDlt} oldΔ=${!!caps.hasOldDlt}`);
           cb();
         } catch (e) { AddLog('[UI] callback error: ' + e); }
       };
@@ -185,42 +188,42 @@
           fire();
         } else if (++tries > maxTries) {
           clearInterval(iv);
-          AddLog('[UI] ACAPI так и не появился (проверь загрузку палитры/плагина)');
+          AddLog('[UI] ACAPI never appeared (check palette/plugin loading)');
         }
       }, 50);
     }
 
-    // =============== таблица выделения ===============
+    // =============== selection table ===============
     function UpdateSelectedElements() {
       const A = window.ACAPI;
       if (!A || typeof A.GetSelectedElements !== 'function') {
-        AddLog('[UI] ACAPI.GetSelectedElements недоступен');
+        AddLog('[UI] ACAPI.GetSelectedElements unavailable');
         return;
       }
       A.GetSelectedElements().then(function (elemInfos) {
         const selectionTable = document.getElementById('selection');
         while (selectionTable.firstChild) selectionTable.removeChild(selectionTable.firstChild);
 
-        AddLog('[UI] GetSelectedElements вернул: ' + JSON.stringify(elemInfos));
-        AddLog('[UI] Тип данных: ' + typeof elemInfos + ', длина: ' + (elemInfos ? elemInfos.length : 'undefined'));
+        AddLog('[UI] GetSelectedElements returned: ' + JSON.stringify(elemInfos));
+        AddLog('[UI] Data type: ' + typeof elemInfos + ', length: ' + (elemInfos ? elemInfos.length : 'undefined'));
 
         if (!elemInfos || elemInfos.length === 0) {
           const tr = document.createElement('tr');
-          tr.innerHTML = '<td colspan="4">Нет выбранных элементов</td>';
+          tr.innerHTML = '<td colspan="4">No selected elements</td>';
           selectionTable.appendChild(tr);
-          AddLog('[UI] Выделение пусто');
+          AddLog('[UI] Selection is empty');
           return;
         }
 
         const grouped = {};
         for (let i = 0; i < elemInfos.length; i++) {
-          AddLog('[UI] Элемент ' + i + ': ' + JSON.stringify(elemInfos[i]));
+          AddLog('[UI] Element ' + i + ': ' + JSON.stringify(elemInfos[i]));
           
           const typeName  = elemInfos[i][1];
           const elemID    = elemInfos[i][2];
-          const layerName = elemInfos[i][3] || 'Неизвестно';
+          const layerName = elemInfos[i][3] || 'Unknown';
           
-          AddLog('[UI] Парсинг: typeName=' + typeName + ', elemID=' + elemID + ', layerName=' + layerName);
+          AddLog('[UI] Parsing: typeName=' + typeName + ', elemID=' + elemID + ', layerName=' + layerName);
           
           const key = typeName + "||" + elemID + "||" + layerName;
           if (!grouped[key]) grouped[key] = { type: typeName, id: elemID, layer: layerName, count: 0 };
@@ -235,48 +238,48 @@
             '<td>' + grouped[key].count + '</td>';
           selectionTable.appendChild(tr);
         });
-        AddLog('[UI] Выделено групп: ' + Object.keys(grouped).length + ', элементов: ' + elemInfos.length);
+        AddLog('[UI] Selected groups: ' + Object.keys(grouped).length + ', elements: ' + elemInfos.length);
       }).catch(err => AddLog('[UI] GetSelectedElements error: ' + err));
     }
 
-    // =============== переименование ID (массово, без слоёв) ===============
+    // =============== ID renaming (bulk, without layers) ===============
     function changeAllSelectedIDs() {
       const A = window.ACAPI;
       if (!A || typeof A.ChangeSelectedElementsID !== 'function') {
-        AddLog('[UI] ACAPI.ChangeSelectedElementsID недоступен');
+        AddLog('[UI] ACAPI.ChangeSelectedElementsID unavailable');
         return;
       }
       
       const baseID = document.getElementById('baseID').value.trim();
       if (!baseID) {
-        AddLog('[UI] Введите базовое название для ID элементов');
+        AddLog('[UI] Enter base name for element IDs');
         document.getElementById('baseID').focus();
         return;
       }
       
-      AddLog('[UI] Изменяем ID элементов с базовым названием: ' + baseID);
+      AddLog('[UI] Changing element IDs with base name: ' + baseID);
       
       A.ChangeSelectedElementsID(baseID).then(function(success) {
         if (success) {
-          AddLog('[UI] ✅ ID всех выбранных элементов успешно изменены!');
-          setInfo("id-change-info", "✅ ID изменены! Примеры: " + baseID + "-01, " + baseID + "-02, " + baseID + "-03...");
+          AddLog('[UI] ✅ All selected element IDs successfully changed!');
+          setInfo("id-change-info", "✅ IDs changed! Examples: " + baseID + "-01, " + baseID + "-02, " + baseID + "-03...");
           document.getElementById('baseID').value = '';
           setTimeout(UpdateSelectedElements, 1000);
         } else {
-          AddLog('[UI] ❌ Ошибка при изменении ID элементов');
-          setInfo("id-change-info", "❌ Ошибка! Возможно нет выбранных элементов или элемент не поддерживает изменение ID");
+          AddLog('[UI] ❌ Error changing element IDs');
+          setInfo("id-change-info", "❌ Error! Possibly no selected elements or element doesn't support ID change");
         }
       }).catch(function(err) {
-        AddLog('[UI] ❌ Ошибка вызова ChangeSelectedElementsID: ' + err);
-        setInfo("id-change-info", "❌ Ошибка: " + err);
+        AddLog('[UI] ❌ Error calling ChangeSelectedElementsID: ' + err);
+        setInfo("id-change-info", "❌ Error: " + err);
       });
     }
 
-    // =============== создание папки/слоя + перенос + ID ===============
+    // =============== folder/layer creation + move + ID ===============
     function createLayerAndMoveElements() {
       const A = window.ACAPI;
       if (!A) {
-        AddLog('[UI] ACAPI недоступен');
+        AddLog('[UI] ACAPI unavailable');
         return;
       }
 
@@ -326,7 +329,7 @@
       }
     }
 
-    // =============== ориентация/раскладка/... ===============
+    // =============== orientation/distribution/... ===============
     function RotateSelection() {
       const s = document.getElementById('rotateAngle').value;
       if (window.ACAPI && typeof ACAPI.RotateSelected === 'function') ACAPI.RotateSelected(s);
@@ -358,7 +361,7 @@
       } else if (count <= 0) setInfo("info-dist", "Количество должно быть ≥ 1");
     }
 
-    // ================= ОБОЛОЧКА / КОНТУРЫ =================
+    // ================= SHELL / CONTOURS =================
     function SelectBaseLine() {
       const A = window.ACAPI;
       if (!A) { AddLog('[Shell] ACAPI недоступен'); return; }
@@ -425,16 +428,29 @@
       });
     }
 
-    // ================= РАЗМЕТКА/РАЗМЕРЫ =================
+    // ================= MARKUP/DIMENSIONS =================
     async function SetMarkupStepUI() {
+      AddLog('[UI] DEBUG: SetMarkupStepUI called');
       const A = window.ACAPI;
       if (!A) {
-        AddLog('[UI] ACAPI недоступен');
+        AddLog('[UI] ACAPI unavailable');
         return;
       }
 
-      const stepStr = document.getElementById('markupStep').value;
+      const stepInput = document.getElementById('markupStep');
+      AddLog('[UI] DEBUG: stepInput = ' + stepInput);
+      const stepStr = stepInput.value;
+      AddLog('[UI] DEBUG: stepStr = "' + stepStr + '"');
+      AddLog('[UI] DEBUG: stepInput.value = "' + stepInput.value + '"');
+      AddLog('[UI] DEBUG: stepInput.defaultValue = "' + stepInput.defaultValue + '"');
+      AddLog('[UI] DEBUG: stepInput.type = "' + stepInput.type + '"');
+      AddLog('[UI] DEBUG: stepInput.id = "' + stepInput.id + '"');
       const stepMm = parseFloat(stepStr);
+      AddLog('[UI] DEBUG: stepMm = ' + stepMm);
+      
+      // Принудительно преобразуем в число
+      const stepMmNumber = Number(stepStr);
+      AddLog('[UI] DEBUG: stepMmNumber = ' + stepMmNumber);
       
       if (isNaN(stepMm) || stepMm <= 0) {
         AddLog('[UI] Неверное значение шага разметки');
@@ -443,14 +459,22 @@
       }
 
       AddLog('[UI] Установка шага разметки: ' + stepMm + ' мм');
+      AddLog('[UI] DEBUG: stepMm type = ' + typeof stepMm);
+      AddLog('[UI] DEBUG: stepMm isNaN = ' + isNaN(stepMm));
+      AddLog('[UI] DEBUG: stepMm === 0 = ' + (stepMm === 0));
       setInfo("info-markup", "Установка шага разметки...");
 
       if (typeof A.SetMarkupStep === 'function') {
         try {
-          const success = await A.SetMarkupStep(stepMm);
+          AddLog('[UI] DEBUG: Calling A.SetMarkupStep(' + stepMmNumber + ')');
+          AddLog('[UI] DEBUG: stepMmNumber type=' + typeof stepMmNumber + ', value=' + stepMmNumber);
+          // Принудительно преобразуем в строку, чтобы избежать INTEGER
+          const success = await A.SetMarkupStep(stepMmNumber.toString());
           if (success) {
-            AddLog('[UI] ✅ Шаг разметки установлен: ' + stepMm + ' мм');
-            setInfo("info-markup", "✅ Шаг разметки установлен: " + stepMm + " мм");
+            // Сохраняем установленное значение в глобальную переменную
+            g_lastMarkupStepMm = stepMmNumber;
+            AddLog('[UI] ✅ Шаг разметки установлен: ' + stepMmNumber + ' мм');
+            setInfo("info-markup", "✅ Шаг разметки установлен: " + stepMmNumber + " мм");
           } else {
             AddLog('[UI] ❌ Ошибка установки шага разметки');
             setInfo("info-markup", "❌ Ошибка установки шага разметки");
@@ -468,7 +492,43 @@
     async function CreateMarkupUI() {
       const A = window.ACAPI;
       if (!A) {
-        AddLog('[UI] ACAPI недоступен');
+        AddLog('[UI] ACAPI unavailable');
+        return;
+      }
+
+      // Используем сохраненное значение шага (если пользователь нажимал "Set")
+      // или читаем из поля, если шаг еще не был установлен
+      let stepMm = g_lastMarkupStepMm;
+      
+      // Если шаг не был установлен через "Set", читаем из поля
+      if (g_lastMarkupStepMm === 2500) { // значение по умолчанию
+        const stepInput = document.getElementById('markupStep');
+        const stepStr = stepInput.value;
+        const fieldStepMm = parseFloat(stepStr);
+        
+        if (!isNaN(fieldStepMm) && fieldStepMm > 0) {
+          stepMm = fieldStepMm;
+          AddLog('[UI] Используем значение из поля: ' + stepMm + ' мм');
+        }
+      } else {
+        AddLog('[UI] Используем установленный шаг: ' + stepMm + ' мм');
+      }
+      
+      // Устанавливаем шаг
+      AddLog('[UI] Установка шага: ' + stepMm + ' мм');
+      try {
+        const stepSuccess = await A.SetMarkupStep(stepMm.toString());
+        if (stepSuccess) {
+          g_lastMarkupStepMm = stepMm; // обновляем сохраненное значение
+          AddLog('[UI] ✅ Шаг установлен: ' + stepMm + ' мм');
+        } else {
+          AddLog('[UI] ❌ Ошибка установки шага');
+          setInfo("info-markup", "❌ Ошибка установки шага");
+          return;
+        }
+      } catch (err) {
+        AddLog('[UI] ❌ Ошибка установки шага: ' + err);
+        setInfo("info-markup", "❌ Ошибка установки шага");
         return;
       }
 
@@ -498,7 +558,7 @@
     async function CreateDimensionsToLineUI() {
       const A = window.ACAPI;
       if (!A) {
-        AddLog('[UI] ACAPI недоступен');
+        AddLog('[UI] ACAPI unavailable');
         return;
       }
 
@@ -528,7 +588,7 @@
     async function CreateDimensionsBetweenUI() {
       const A = window.ACAPI;
       if (!A) {
-        AddLog('[UI] ACAPI недоступен');
+        AddLog('[UI] ACAPI unavailable');
         return;
       }
 
@@ -558,7 +618,7 @@
     async function CreateDimensionsToPointUI() {
       const A = window.ACAPI;
       if (!A) {
-        AddLog('[UI] ACAPI недоступен');
+        AddLog('[UI] ACAPI unavailable');
         return;
       }
 
@@ -585,11 +645,11 @@
       }
     }
 
-    // ================= ПРИЗЕМЛЕНИЕ / СМЕЩЕНИЕ =================
+    // ================= GROUNDING / OFFSET =================
     async function SetGroundSurfaceUI() {
       const A = window.ACAPI;
       if (!A) {
-        AddLog('[UI] ACAPI недоступен');
+        AddLog('[UI] ACAPI unavailable');
         return;
       }
 
@@ -619,7 +679,7 @@
     async function SetGroundObjectsUI() {
       const A = window.ACAPI;
       if (!A) {
-        AddLog('[UI] ACAPI недоступен');
+        AddLog('[UI] ACAPI unavailable');
         return;
       }
 
@@ -696,7 +756,7 @@
     async function LandToMeshUI() {
       const A = window.ACAPI;
       if (!A) {
-        AddLog('[UI] ACAPI недоступен');
+        AddLog('[UI] ACAPI unavailable');
         return;
       }
 
@@ -749,7 +809,7 @@
       if (window.ACAPI_Call) ACAPI_Call('ApplyGroundOffset', 0.0);
     }
 
-    // =============== вкладки / init ===============
+    // =============== tabs / init ===============
     function openTab(evt, tabId) {
       const contents = document.getElementsByClassName("tabcontent");
       const links = document.getElementsByClassName("tablink");
@@ -828,291 +888,291 @@
     </div>
   </div>
 
-  <!-- Таблица выделения -->
+  <!-- Selection Table -->
   <table class="selection-table">
     <thead>
-      <tr><th colspan="4">Выбранные элементы:</th></tr>
-      <tr><th>Тип</th><th>ID</th><th>Слой</th><th>Кол-во</th></tr>
+      <tr><th colspan="4">Selected Elements:</th></tr>
+      <tr><th>Type</th><th>ID</th><th>Layer</th><th>Count</th></tr>
     </thead>
-    <tbody id="selection"><tr><td colspan="4">Нет выбранных элементов</td></tr></tbody>
+    <tbody id="selection"><tr><td colspan="4">No selected elements</td></tr></tbody>
   </table>
 
-  <!-- Вкладки -->
+  <!-- Tabs -->
   <div class="tabs">
-    <button class="tablink" onclick="openTab(event,'tab-distrib')">Распределение</button>
-    <button class="tablink" onclick="openTab(event,'tab-orient')">Ориентация</button>
-    <button class="tablink" onclick="openTab(event,'tab-ground')">Приземление</button>
-    <button class="tablink" onclick="openTab(event,'tab-markup')">Разметка</button>
-    <button class="tablink" onclick="openTab(event,'tab-shell')">Контуры</button>
+    <button class="tablink" onclick="openTab(event,'tab-distrib')">Distribution</button>
+    <button class="tablink" onclick="openTab(event,'tab-orient')">Orientation</button>
+    <button class="tablink" onclick="openTab(event,'tab-ground')">Grounding</button>
+    <button class="tablink" onclick="openTab(event,'tab-markup')">Markup</button>
+    <button class="tablink" onclick="openTab(event,'tab-shell')">Contours</button>
     <button class="tablink" onclick="openTab(event,'tab-id')">ID</button>
-    <button class="tablink" onclick="openTab(event,'tab-layers')">Слои</button>
+    <button class="tablink" onclick="openTab(event,'tab-layers')">Layers</button>
   </div>
 
-  <!-- Распределение -->
+  <!-- Distribution -->
   <div id="tab-distrib" class="tabcontent">
     <fieldset class="control-block">
-      <legend>Распределение</legend>
+      <legend>Distribution</legend>
       <div style="text-align:center;">
-        <input type="button" onclick="SetDistributionLine()" value="Задать линию"><br><br>
-        <input type="button" onclick="SetDistributionObject()" value="Задать объект">
+        <input type="button" onclick="SetDistributionLine()" value="Set Line"><br><br>
+        <input type="button" onclick="SetDistributionObject()" value="Set Object">
       </div>
       <div>
-        <label>Расстояние:</label>
+        <label>Distance:</label>
         <input type="number" id="distStep" step="1" value="0">
         <input type="button" onclick="SetDistributionStep()" value="OK">
       </div>
       <div>
-        <label>Количество:</label>
+        <label>Count:</label>
         <input type="number" id="distCount" step="1" value="1">
         <input type="button" onclick="SetDistributionCount()" value="OK">
       </div>
-      <div id="info-dist" class="info-box">Подсказка: задайте параметры</div>
+      <div id="info-dist" class="info-box">Hint: set parameters</div>
     </fieldset>
 
     <button class="tab-help"
             data-help-url="https://landscape.227.info/help/distribution?embed=1"
-            data-help-title="Справка: Распределение">Помощь</button>
+            data-help-title="Help: Distribution">Help</button>
   </div>
 
-  <!-- Ориентация -->
+  <!-- Orientation -->
   <div id="tab-orient" class="tabcontent">
     <fieldset class="control-block">
-      <legend>Ориентация</legend>
+      <legend>Orientation</legend>
       <div>
-        <label>Угол:</label>
+        <label>Angle:</label>
         <input type="number" id="rotateAngle" step="1" value="0">
-        <input type="button" onclick="RotateSelection()" value="Повернуть">
+        <input type="button" onclick="RotateSelection()" value="Rotate">
       </div>
       <div style="text-align:center; margin-top:10px;">
-        <input type="button" onclick="AlignSelectionX()" value="Выровнять по X"><br><br>
-        <input type="button" onclick="RandomizeAngles()" value="Случайный угол (0-360)"><br><br>
-        <input type="button" onclick="OrientObjectsToPoint()" value="Сориентировать на точку">
+        <input type="button" onclick="AlignSelectionX()" value="Align to X"><br><br>
+        <input type="button" onclick="RandomizeAngles()" value="Random Angle (0-360)"><br><br>
+        <input type="button" onclick="OrientObjectsToPoint()" value="Orient to Point">
       </div>
-      <div id="info-orient" class="info-box">Подсказка: задайте угол или выберите действие</div>
+      <div id="info-orient" class="info-box">Hint: set angle or choose action</div>
     </fieldset>
 
     <button class="tab-help"
             data-help-url="https://landscape.227.info/help/orientation?embed=1"
-            data-help-title="Справка: Ориентация">Помощь</button>
+            data-help-title="Help: Orientation">Help</button>
   </div>
 
-  <!-- Приземление -->
+  <!-- Grounding -->
   <div id="tab-ground" class="tabcontent">
     <fieldset class="control-block">
-      <legend>Приземление</legend>
+      <legend>Grounding</legend>
 
       <div style="text-align:center; margin-bottom:10px;">
-        <label>Смещение Z (мм):</label>
+        <label>Z Offset (mm):</label>
         <input type="number" id="groundOffset" step="1" value="0">
-        <input id="btnApplyOffset" type="button" onclick="whenACAPIReadyDo(ApplyZDeltaUI)" value="Применить">
+        <input id="btnApplyOffset" type="button" onclick="whenACAPIReadyDo(ApplyZDeltaUI)" value="Apply">
       </div>
 
       <div style="text-align:center;">
-        <input id="btnLand" type="button" onclick="whenACAPIReadyDo(LandToMeshUI)" value="Приземлить">
+        <input id="btnLand" type="button" onclick="whenACAPIReadyDo(LandToMeshUI)" value="Land to Mesh">
       </div>
 
       <div id="info-ground" class="info-box">
-        <strong>Инструкция:</strong><br>
-        1. Выделите 3D-сетку и объекты для приземления одновременно<br>
-        2. Нажмите "Приземлить" для посадки объектов на 3D-сетку<br>
+        <strong>Instructions:</strong><br>
+        1. Select 3D mesh and objects for landing simultaneously<br>
+        2. Click "Land to Mesh" to place objects on 3D mesh<br>
         <br>
-        <strong>Смещение:</strong> "Применить" — просто сдвиг по Z (без 3D-сетки)
+        <strong>Offset:</strong> "Apply" — simple Z shift (without 3D mesh)
       </div>
     </fieldset>
 
     <button class="tab-help"
             data-help-url="https://landscape.227.info/help/ground?embed=1"
-            data-help-title="Справка: Приземление">Помощь</button>
+            data-help-title="Help: Grounding">Help</button>
   </div>
 
-  <!-- Разметка -->
+  <!-- Markup -->
   <div id="tab-markup" class="tabcontent">
     <fieldset class="control-block">
-      <legend>Размеры и разметка</legend>
+      <legend>Dimensions and Markup</legend>
 
       <div style="text-align:center; margin-bottom:15px;">
-        <label>Шаг разметки (мм):</label>
-        <input type="number" id="markupStep" step="1" value="1000" min="1">
-        <input id="btnSetMarkupStep" type="button" onclick="whenACAPIReadyDo(SetMarkupStepUI)" value="Установить">
+        <label>Markup Step (mm):</label>
+        <input type="number" id="markupStep" step="1" value="2500" min="1" placeholder="Enter step in mm">
+        <input id="btnSetMarkupStep" type="button" onclick="whenACAPIReadyDo(SetMarkupStepUI)" value="Set">
       </div>
 
       <div style="text-align:center; margin-bottom:15px;">
-        <input id="btnCreateMarkup" type="button" onclick="whenACAPIReadyDo(CreateMarkupUI)" value="Создать разметку">
+        <input id="btnCreateMarkup" type="button" onclick="whenACAPIReadyDo(CreateMarkupUI)" value="Create Markup">
       </div>
 
       <div style="text-align:center; margin-bottom:15px;">
-        <input id="btnCreateDimensionsToLine" type="button" onclick="whenACAPIReadyDo(CreateDimensionsToLineUI)" value="Размеры к линии">
+        <input id="btnCreateDimensionsToLine" type="button" onclick="whenACAPIReadyDo(CreateDimensionsToLineUI)" value="Dimensions to Line">
       </div>
 
       <div style="text-align:center; margin-bottom:15px;">
-        <input id="btnCreateDimensionsBetween" type="button" onclick="whenACAPIReadyDo(CreateDimensionsBetweenUI)" value="Размеры между объектами">
+        <input id="btnCreateDimensionsBetween" type="button" onclick="whenACAPIReadyDo(CreateDimensionsBetweenUI)" value="Dimensions Between Objects">
       </div>
 
       <div style="text-align:center; margin-bottom:15px;">
-        <input id="btnCreateDimensionsToPoint" type="button" onclick="whenACAPIReadyDo(CreateDimensionsToPointUI)" value="Размеры к точке">
+        <input id="btnCreateDimensionsToPoint" type="button" onclick="whenACAPIReadyDo(CreateDimensionsToPointUI)" value="Dimensions to Point">
       </div>
 
       <div id="info-markup" class="info-box">
-        <strong>Инструкция:</strong><br>
-        <strong>1. Создать разметку:</strong><br>
-        • Установите шаг разметки (например, 1000 мм)<br>
-        • Нажмите "Установить" для применения шага<br>
-        • Выделите объекты для разметки<br>
-        • Нажмите "Создать разметку"<br><br>
-        <strong>2. Размеры к линии:</strong><br>
-        • Выделите объекты (Object/Column/Lamp)<br>
-        • Нажмите "Размеры к линии"<br>
-        • Укажите две точки линии<br><br>
-        <strong>3. Размеры между объектами:</strong><br>
-        • Выделите объекты (Object/Column/Lamp)<br>
-        • Нажмите "Размеры между объектами"<br><br>
-        <strong>4. Размеры к точке:</strong><br>
-        • Выделите объекты (Object/Column/Lamp)<br>
-        • Нажмите "Размеры к точке"<br>
-        • Укажите целевую точку
+        <strong>Instructions:</strong><br>
+        <strong>1. Create Markup:</strong><br>
+        • Set markup step (e.g., 1000 mm)<br>
+        • Click "Set" to apply the step<br>
+        • Select objects for markup<br>
+        • Click "Create Markup"<br><br>
+        <strong>2. Dimensions to Line:</strong><br>
+        • Select objects (Object/Column/Lamp)<br>
+        • Click "Dimensions to Line"<br>
+        • Specify two line points<br><br>
+        <strong>3. Dimensions Between Objects:</strong><br>
+        • Select objects (Object/Column/Lamp)<br>
+        • Click "Dimensions Between Objects"<br><br>
+        <strong>4. Dimensions to Point:</strong><br>
+        • Select objects (Object/Column/Lamp)<br>
+        • Click "Dimensions to Point"<br>
+        • Specify target point
       </div>
     </fieldset>
 
     <button class="tab-help"
             data-help-url="https://landscape.227.info/help/dimensions"
-            data-help-title="Справка: Разметка">Помощь</button>
+            data-help-title="Help: Markup">Help</button>
   </div>
 
-  <!-- Контуры -->
+  <!-- Contours -->
   <div id="tab-shell" class="tabcontent">
     <fieldset class="control-block">
-      <legend>Создание контуров по линии</legend>
+      <legend>Create Contours from Line</legend>
 
       <div style="text-align:center; margin-bottom:10px;">
         <p style="font-size:12px; color:#666;">
-          1. Нажмите "Выбрать линию" и выберите базовую линию<br>
-          2. Задайте ширину контура<br>
-          3. Нажмите кнопку для создания контуров<br>
-          <strong>Примечание:</strong> Для spline нужен шаг, для остальных линий - только ширина
+          1. Click "Select Line" and choose base line<br>
+          2. Set contour width<br>
+          3. Click button to create contours<br>
+          <strong>Note:</strong> For spline step is needed, for other lines - only width
         </p>
       </div>
 
       <div style="text-align:center; margin-bottom:10px;">
         <input type="button" 
                onclick="SelectBaseLine()" 
-               value="Выбрать линию"
+               value="Select Line"
                style="font-size:14px; padding:6px 15px; font-weight:bold;">
       </div>
 
       <div>
-        <label>Ширина (мм):</label>
+        <label>Width (mm):</label>
         <input type="number" id="shellWidth" step="1" value="1000">
       </div>
 
       <div>
-        <label>Шаг (мм):</label>
+        <label>Step (mm):</label>
         <input type="number" id="shellStep" step="1" value="500">
       </div>
 
       <div style="text-align:center; margin-top:15px;">
         <input type="button" 
                onclick="CreateShellFromLine()" 
-               value="Создать контуры"
+               value="Create Contours"
                style="font-size:16px; padding:8px 20px; font-weight:bold;">
       </div>
 
       <div id="info-shell" class="info-box">
-        Создаёт контуры по базовой линии с заданными параметрами.<br>
-        <strong>Для spline:</strong> откладывает точки с заданным шагом, строит перпендикуляры<br>
-        <strong>Для остальных линий:</strong> проверяет замкнутость, строит перпендикуляры в начале/конце<br>
-        Создаёт два боковых контура с замыкающими линиями (для открытых линий).<br>
-        <strong>Внимание:</strong> Сначала выберите базовую линию (spline/polyline/дуга/линия).
+        Creates contours from base line with specified parameters.<br>
+        <strong>For spline:</strong> places points with given step, builds perpendiculars<br>
+        <strong>For other lines:</strong> checks closure, builds perpendiculars at start/end<br>
+        Creates two side contours with closing lines (for open lines).<br>
+        <strong>Attention:</strong> First select base line (spline/polyline/arc/line).
       </div>
     </fieldset>
 
     <button class="tab-help"
             data-help-url="https://landscape.227.info/help/shell"
-            data-help-title="Справка: Оболочка">Помощь</button>
+            data-help-title="Help: Contours">Help</button>
   </div>
 
   <!-- ID -->
   <div id="tab-id" class="tabcontent">
     <fieldset class="control-block">
-      <legend>Массово задать ID выделенным элементам</legend>
+      <legend>Bulk Set ID for Selected Elements</legend>
 
       <div style="text-align:center; margin-bottom:10px;">
         <p style="font-size:12px; color:#666;">
-          Переименует ВСЕ выделенные элементы.<br>
-          Новые ID будут вида "Имя-01", "Имя-02", "Имя-03"...<br>
-          Слой не меняется.
+          Renames ALL selected elements.<br>
+          New IDs will be like "Name-01", "Name-02", "Name-03"...<br>
+          Layer remains unchanged.
         </p>
       </div>
 
-      <label for="baseID">Базовое название:</label>
-      <input type="text" id="baseID" placeholder="Например: Сосна обыкновенная" style="width: 200px; padding: 3px; margin: 3px 0;" />
+      <label for="baseID">Base Name:</label>
+      <input type="text" id="baseID" placeholder="e.g.: Common Pine" style="width: 200px; padding: 3px; margin: 3px 0;" />
       <br>
-      <input type="button" value="Задать ID выделенным элементам" onclick="changeAllSelectedIDs()" style="margin-top: 10px;" />
+      <input type="button" value="Set ID for Selected Elements" onclick="changeAllSelectedIDs()" style="margin-top: 10px;" />
 
       <div class="info-box" id="id-change-info">
-        Введите базовое название и нажмите кнопку. Все выбранные элементы получат ID с номером (например: Сосна обыкновенная-01, Сосна обыкновенная-02...)
+        Enter base name and click button. All selected elements will get ID with number (e.g.: Common Pine-01, Common Pine-02...)
       </div>
 
       <button class="tab-help"
               data-help-url="https://landscape.227.info/help/selection"
-              data-help-title="Справка: Выбор элементов">Помощь</button>
+              data-help-title="Help: Element Selection">Help</button>
     </fieldset>
   </div>
 
-  <!-- Слои -->
+  <!-- Layers -->
   <div id="tab-layers" class="tabcontent">
-    <!-- Создать папку/слой + переместить элементы -->
+    <!-- Create folder/layer + move elements -->
     <fieldset class="control-block">
-      <legend>Создать папку/слой и перенести элементы</legend>
+      <legend>Create Folder/Layer and Move Elements</legend>
 
       <div style="text-align:center; margin-bottom:15px;">
         <p style="font-size:12px; color:#666;">
-          1. Выделите элементы (см. таблицу выше)<br>
-          2. Укажите путь папки слоёв (например: "Ландшафт/Растения")<br>
-          3. Укажите название нового слоя<br>
-          4. Нажмите "Создать и переместить"<br>
-          <small style="color:#888;">ID элементов можно изменить отдельно в блоке выше</small>
+          1. Select elements (see table above)<br>
+          2. Specify layer folder path (e.g.: "Landscape/Plants")<br>
+          3. Specify new layer name<br>
+          4. Click "Create and Move"<br>
+          <small style="color:#888;">Element IDs can be changed separately in the block above</small>
         </p>
       </div>
 
       <div>
-        <label>Папка слоёв:</label>
-        <input type="text" id="layerFolder" placeholder="Например: Ландшафт/Растения" style="width: 250px; padding: 3px; margin: 3px 0;" />
+        <label>Layer Folder:</label>
+        <input type="text" id="layerFolder" placeholder="e.g.: Landscape/Plants" style="width: 250px; padding: 3px; margin: 3px 0;" />
         <br>
-        <small style="color:#666;">Разделяйте подпапки через "/" (например: "Ландшафт/Растения/Деревья")</small>
+        <small style="color:#666;">Separate subfolders with "/" (e.g.: "Landscape/Plants/Trees")</small>
       </div>
 
       <div>
-        <label>Новый слой:</label>
-        <input type="text" id="layerName" placeholder="Например: Сосны обыкновенные" style="width: 250px; padding: 3px; margin: 3px 0;" />
+        <label>New Layer:</label>
+        <input type="text" id="layerName" placeholder="e.g.: Common Pines" style="width: 250px; padding: 3px; margin: 3px 0;" />
       </div>
 
       <div style="text-align:center; margin-top:15px;">
         <input type="button" 
                onclick="createLayerAndMoveElements()" 
-               value="Создать и переместить"
+               value="Create and Move"
                style="font-size:16px; padding:8px 20px; font-weight:bold; background:#4F604F; color:white; border:none; border-radius:4px; cursor:pointer;">
       </div>
 
       <div id="info-layers" class="info-box">
-        Что произойдёт:<br>
-        • Создастся папка для слоёв (если её нет)<br>
-        • Создастся новый слой в этой папке<br>
-        • Все выделенные элементы будут перемещены в этот слой<br>
-        • ID элементов останутся прежними (можно изменить отдельно)<br>
-        • Это можно отменить через Ctrl+Z
+        What will happen:<br>
+        • Layer folder will be created (if it doesn't exist)<br>
+        • New layer will be created in this folder<br>
+        • All selected elements will be moved to this layer<br>
+        • Element IDs will remain the same (can be changed separately)<br>
+        • This can be undone with Ctrl+Z
       </div>
     </fieldset>
 
     <button class="tab-help"
             data-help-url="https://landscape.227.info/help/layers"
-            data-help-title="Справка: Слои и ID">Помощь</button>
+            data-help-title="Help: Layers and ID">Help</button>
   </div>
 
-  <div id="log-box">[Лог плагина будет здесь]</div>
+  <div id="log-box">[Plugin log will appear here]</div>
 
   <a href="#"
      data-help-url="https://landscape.227.info/?embed=1"
-     data-help-title="LandscapeHelper — сайт">
+     data-help-title="LandscapeHelper — website">
     landscape.227.info
   </a>
 </body>
