@@ -664,7 +664,15 @@ bool GroundHelper::ApplyGroundOffset(double offset /* meters */)
 bool GroundHelper::ApplyZDelta(double deltaMeters)
 {
     Log("[ApplyZDelta] ENTER delta=%.6f", deltaMeters);
-    if (g_objectGuids.IsEmpty()) { Log("[ApplyZDelta] no objects"); return false; }
+    
+    // Если объекты не установлены, попробуем получить их из текущего выделения
+    if (g_objectGuids.IsEmpty()) {
+        Log("[ApplyZDelta] no objects in cache, trying to get from current selection");
+        if (!SetGroundObjects()) {
+            Log("[ApplyZDelta] no objects in selection either");
+            return false;
+        }
+    }
 
     const GSErr cmdErr = ACAPI_CallUndoableCommand("Adjust Z by Delta", [=]() -> GSErr {
         for (const API_Guid& guid : g_objectGuids) {

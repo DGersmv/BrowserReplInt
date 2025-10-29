@@ -50,19 +50,36 @@ static GS::UniString LoadHtmlFromResource()
 // Общий хелпер: вытащить double из JS::Base (поддерживает number, string "3,5"/"3.5", bool, а также массив аргументов)
 static double GetDoubleFromJs(GS::Ref<JS::Base> p, double def = 0.0)
 {
-	if (p == nullptr) return def;
+	ACAPI_WriteReport("[JS->C++] GetDoubleFromJs: def=%.6f", false, def);
+	
+	if (p == nullptr) {
+		ACAPI_WriteReport("[JS->C++] GetDoubleFromJs: param is nullptr, returning def", false);
+		return def;
+	}
 
 	if (GS::Ref<JS::Value> v = GS::DynamicCast<JS::Value>(p)) {
 		const auto t = v->GetType();
+		ACAPI_WriteReport("[JS->C++] GetDoubleFromJs: type=%d", false, (int)t);
 
-		if (t == JS::Value::DOUBLE || t == JS::Value::INTEGER)
-			return v->GetDouble();
+		if (t == JS::Value::DOUBLE) {
+			const double result = v->GetDouble();
+			ACAPI_WriteReport("[JS->C++] GetDoubleFromJs: DOUBLE value=%.6f", false, result);
+			return result;
+		}
+		
+		if (t == JS::Value::INTEGER) {
+			const double result = v->GetDouble();
+			ACAPI_WriteReport("[JS->C++] GetDoubleFromJs: INTEGER value=%.6f", false, result);
+			return result;
+		}
 
 		if (t == JS::Value::STRING) {
 			GS::UniString s = v->GetString();
+			ACAPI_WriteReport("[JS->C++] GetDoubleFromJs: string value='%s'", false, s.ToCStr().Get());
 			for (UIndex i = 0; i < s.GetLength(); ++i) if (s[i] == ',') s[i] = '.';
 			double out = def;
 			std::sscanf(s.ToCStr().Get(), "%lf", &out);
+			ACAPI_WriteReport("[JS->C++] GetDoubleFromJs: parsed=%.6f", false, out);
 			return out;
 		}
 	}
@@ -286,8 +303,25 @@ void BrowserRepl::RegisterACAPIJavaScriptObject()
 		}));
 
 	jsACAPI->AddItem(new JS::Function("ApplyZDelta", [](GS::Ref<JS::Base> param) {
+		// Диагностика: проверяем что пришло
+		if (BrowserRepl::HasInstance()) {
+			if (param == nullptr) {
+				BrowserRepl::GetInstance().LogToBrowser("[JS] ApplyZDelta: param is nullptr!");
+			} else if (GS::Ref<JS::Value> v = GS::DynamicCast<JS::Value>(param)) {
+				const auto t = v->GetType();
+				if (t == JS::Value::DOUBLE || t == JS::Value::INTEGER) {
+					BrowserRepl::GetInstance().LogToBrowser(GS::UniString::Printf("[JS] ApplyZDelta: got number %.6f", v->GetDouble()));
+				} else if (t == JS::Value::STRING) {
+					BrowserRepl::GetInstance().LogToBrowser("[JS] ApplyZDelta: got string '" + v->GetString() + "'");
+				} else {
+					BrowserRepl::GetInstance().LogToBrowser(GS::UniString::Printf("[JS] ApplyZDelta: got type %d", (int)t));
+				}
+			} else {
+				BrowserRepl::GetInstance().LogToBrowser("[JS] ApplyZDelta: param is not JS::Value");
+			}
+		}
+		
 		const double val = (param != nullptr) ? GetDoubleFromJs(param, g_lastZDeltaMeters) : g_lastZDeltaMeters;
-		ACAPI_WriteReport("[JS->C++] ApplyZDelta call=%.6f m (cached=%.6f)", false, val, g_lastZDeltaMeters);
 		if (BrowserRepl::HasInstance())
 			BrowserRepl::GetInstance().LogToBrowser(GS::UniString::Printf("[JS] ApplyZDelta(%.3f m)", val));
 		const bool ok = GroundHelper::ApplyZDelta(val);

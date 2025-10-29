@@ -647,60 +647,51 @@
     }
 
     async function ApplyZDeltaUI() {
-      const A = window.ACAPI;
-      if (!A) {
-        AddLog('[UI] ACAPI недоступен');
-        return;
-      }
+  AddLog('[UI] ===== ApplyZDeltaUI START =====');
+  const A = window.ACAPI;
+  if (!A) {
+    AddLog('[UI] ACAPI недоступен');
+    return;
+  }
 
-      const offsetStr = document.getElementById('groundOffset').value;
-      const offsetMm = parseFloat(offsetStr);
-      
-      if (isNaN(offsetMm)) {
-        AddLog('[UI] Неверное значение смещения');
-        setInfo("info-ground", "❌ Неверное значение смещения");
-        return;
-      }
+  const offsetStr = document.getElementById('groundOffset').value;
+  AddLog('[UI] DEBUG: groundOffset.value = "' + offsetStr + '"');
+  const offsetMm  = parseFloat(offsetStr);
+  AddLog('[UI] DEBUG: parseFloat result = ' + offsetMm);
+  if (isNaN(offsetMm)) {
+    AddLog('[UI] Неверное значение смещения');
+    setInfo("info-ground", "❌ Неверное значение смещения");
+    return;
+  }
 
-      const offsetM = offsetMm / 1000.0;
-      AddLog('[UI] Применение смещения Z: ' + offsetMm + ' мм (' + offsetM + ' м)');
-      setInfo("info-ground", "Применение смещения...");
+  const offsetM = offsetMm / 1000.0;
+  AddLog('[UI] Применение смещения Z: ' + offsetMm + ' мм (' + offsetM + ' м)');
+  setInfo("info-ground", "Применение смещения...");
 
-      // Захватываем текущие объекты из выделения, чтобы смещение точно применилось
-      if (typeof A.SetGroundObjects === 'function') {
-        try {
-          const okSet = await A.SetGroundObjects();
-          if (!okSet) {
-            AddLog('[UI] ❌ Объекты не установлены из выделения');
-            setInfo("info-ground", "❌ Выделите объекты и повторите");
-            return;
-          }
-        } catch (err) {
-          AddLog('[UI] ❌ Ошибка вызова SetGroundObjects: ' + err);
-          setInfo("info-ground", "❌ Ошибка: " + err);
-          return;
-        }
-      }
-
-      if (typeof A.ApplyZDelta === 'function') {
-        try {
-          const success = await A.ApplyZDelta(offsetM);
-          if (success) {
-            AddLog('[UI] ✅ Смещение применено успешно');
-            setInfo("info-ground", "✅ Смещение применено: " + offsetMm + " мм");
-          } else {
-            AddLog('[UI] ❌ Ошибка применения смещения');
-            setInfo("info-ground", "❌ Ошибка применения смещения (проверьте выделение)");
-          }
-        } catch (err) {
-          AddLog('[UI] ❌ Ошибка вызова ApplyZDelta: ' + err);
-          setInfo("info-ground", "❌ Ошибка: " + err);
-        }
+  if (typeof A.ApplyZDelta === 'function') {
+    try {
+      AddLog('[UI] DEBUG: Вызываем A.ApplyZDelta(' + offsetM + ')');
+      AddLog('[UI] DEBUG: offsetM type=' + typeof offsetM + ', value=' + offsetM);
+      // Принудительно преобразуем в строку, чтобы избежать INTEGER
+      const success = await A.ApplyZDelta(offsetM.toString());
+      AddLog('[UI] DEBUG: A.ApplyZDelta вернул: ' + success);
+      if (success) {
+        AddLog('[UI] ✅ Смещение применено успешно');
+        setInfo("info-ground", "✅ Смещение применено: " + offsetMm + " мм");
       } else {
-        AddLog('[UI] ❌ Функция ApplyZDelta недоступна');
-        setInfo("info-ground", "❌ Функция недоступна (обновите плагин)");
+        AddLog('[UI] ❌ Ошибка применения смещения');
+        setInfo("info-ground", "❌ Ошибка применения смещения (проверьте выделение)");
       }
+    } catch (err) {
+      AddLog('[UI] ❌ Ошибка вызова ApplyZDelta: ' + err);
+      setInfo("info-ground", "❌ Ошибка: " + err);
     }
+  } else {
+    AddLog('[UI] ❌ Функция ApplyZDelta недоступна');
+    setInfo("info-ground", "❌ Функция недоступна (обновите плагин)");
+  }
+}
+
 
     async function LandToMeshUI() {
       const A = window.ACAPI;
@@ -949,12 +940,36 @@
         <input id="btnCreateMarkup" type="button" onclick="whenACAPIReadyDo(CreateMarkupUI)" value="Создать разметку">
       </div>
 
+      <div style="text-align:center; margin-bottom:15px;">
+        <input id="btnCreateDimensionsToLine" type="button" onclick="whenACAPIReadyDo(CreateDimensionsToLineUI)" value="Размеры к линии">
+      </div>
+
+      <div style="text-align:center; margin-bottom:15px;">
+        <input id="btnCreateDimensionsBetween" type="button" onclick="whenACAPIReadyDo(CreateDimensionsBetweenUI)" value="Размеры между объектами">
+      </div>
+
+      <div style="text-align:center; margin-bottom:15px;">
+        <input id="btnCreateDimensionsToPoint" type="button" onclick="whenACAPIReadyDo(CreateDimensionsToPointUI)" value="Размеры к точке">
+      </div>
+
       <div id="info-markup" class="info-box">
         <strong>Инструкция:</strong><br>
-        1. Установите шаг разметки (например, 1000 мм)<br>
-        2. Нажмите "Установить" для применения шага<br>
-        3. Выделите объекты для разметки<br>
-        4. Нажмите "Создать разметку"
+        <strong>1. Создать разметку:</strong><br>
+        • Установите шаг разметки (например, 1000 мм)<br>
+        • Нажмите "Установить" для применения шага<br>
+        • Выделите объекты для разметки<br>
+        • Нажмите "Создать разметку"<br><br>
+        <strong>2. Размеры к линии:</strong><br>
+        • Выделите объекты (Object/Column/Lamp)<br>
+        • Нажмите "Размеры к линии"<br>
+        • Укажите две точки линии<br><br>
+        <strong>3. Размеры между объектами:</strong><br>
+        • Выделите объекты (Object/Column/Lamp)<br>
+        • Нажмите "Размеры между объектами"<br><br>
+        <strong>4. Размеры к точке:</strong><br>
+        • Выделите объекты (Object/Column/Lamp)<br>
+        • Нажмите "Размеры к точке"<br>
+        • Укажите целевую точку
       </div>
     </fieldset>
 
