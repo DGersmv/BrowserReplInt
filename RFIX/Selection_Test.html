@@ -119,7 +119,10 @@
     .tab-help { position:absolute; right:10px; bottom:10px; padding:8px 12px; border:0; border-radius:8px; background:#366536; color:#fff; font-weight:600; cursor:pointer; box-shadow:0 6px 18px rgba(0,0,0,.2); }
     .tab-help:hover { filter:brightness(1.05); }
     .tab-help:active { transform:translateY(1px); }
+
+    /* COMMENTED OUT: Black log strip
     #log-box { margin-top:10px; padding:8px; background:#111; color:#0f0; font-family:monospace; font-size:12px; height:140px; overflow:auto; }
+    */
     .muted { opacity:.6; }
   </style>
 
@@ -128,11 +131,13 @@
 
     // ================= helpers =================
     function AddLog(msg) {
-      const box = document.getElementById('log-box');
-      if (!box) return;
-      const now = new Date().toLocaleTimeString();
-      box.textContent += "\n[" + now + "] " + msg;
-      box.scrollTop = box.scrollHeight;
+      // No UI log box for now; keep logs in console
+      try { console.log(String(msg)); } catch(_) {}
+      // const box = document.getElementById('log-box');
+      // if (!box) return;
+      // const now = new Date().toLocaleTimeString();
+      // box.textContent += "\n[" + now + "] " + msg;
+      // box.scrollTop = box.scrollHeight;
     }
     
     function setInfo(id, msg) {
@@ -148,8 +153,8 @@
       return v;
     }
 
-    // Глобальная переменная для хранения последнего установленного шага разметки
-    let g_lastMarkupStepMm = 2500; // значение по умолчанию
+    // Global variable for storing the last applied markup step
+    let g_lastMarkupStepMm = 2500; // Default value
 
     // =============== ACAPI bridge waiting (with diagnostics) ===============
     function whenACAPIReadyDo(cb) {
@@ -275,7 +280,7 @@
       });
     }
 
-    // =============== folder/layer creation + move + ID ===============
+    // =============== folder/layer creation + move ===============
     function createLayerAndMoveElements() {
       const A = window.ACAPI;
       if (!A) {
@@ -287,45 +292,44 @@
       const layerName  = document.getElementById('layerName').value.trim();
 
       if (!folderPath) {
-        AddLog('[UI] Введите путь к папке для слоев');
+        AddLog('[UI] Enter the folder path for layers');
         document.getElementById('layerFolder').focus();
         return;
       }
       if (!layerName) {
-        AddLog('[UI] Введите название слоя');
+        AddLog('[UI] Enter the layer name');
         document.getElementById('layerName').focus();
         return;
       }
 
-      AddLog('[UI] Создание папки: ' + folderPath + ', слоя: ' + layerName);
-      setInfo("info-layers", "Создание папки, слоя и перенос выделенных элементов...");
+      AddLog('[UI] Creating folder: ' + folderPath + ', layer: ' + layerName);
+      setInfo("info-layers", "Creating folder, layer, and moving selected elements...");
 
       if (typeof A.CreateLayerAndMoveElements === 'function') {
-        // мост ждёт folder|layer (без baseID)
         const params = folderPath + '|' + layerName;
 
         AddLog('[JS] CreateLayerAndMoveElements');
-        AddLog('[JS] Параметры: ' + params);
+        AddLog('[JS] Parameters: ' + params);
         
         A.CreateLayerAndMoveElements(params).then(function(success) {
-          AddLog('[JS] CreateLayerAndMoveElements вернул: ' + success);
+          AddLog('[JS] CreateLayerAndMoveElements returned: ' + success);
           if (success) {
-            AddLog('[UI] ✅ Папка/слой созданы, элементы перенесены!');
-            setInfo("info-layers", "✅ Успешно! Папка: " + folderPath + ", Слой: " + layerName);
+            AddLog('[UI] ✅ Folder/layer created, elements moved!');
+            setInfo("info-layers", "✅ Success! Folder: " + folderPath + ", Layer: " + layerName);
             document.getElementById('layerFolder').value  = '';
             document.getElementById('layerName').value    = '';
             setTimeout(UpdateSelectedElements, 1000);
           } else {
-            AddLog('[UI] ❌ Ошибка при создании папки/слоя или переносе элементов');
-            setInfo("info-layers", "❌ Ошибка! Проверьте правильность введенных данных / выделение");
+            AddLog('[UI] ❌ Error creating folder/layer or moving elements');
+            setInfo("info-layers", "❌ Error! Please verify the entered data/selection.");
           }
         }).catch(function(err) {
-          AddLog('[UI] ❌ Ошибка вызова CreateLayerAndMoveElements: ' + err);
-          setInfo("info-layers", "❌ Ошибка: " + err);
+          AddLog('[UI] ❌ Error calling CreateLayerAndMoveElements: ' + err);
+          setInfo("info-layers", "❌ Error: " + err);
         });
       } else {
-        AddLog('[UI] ❌ Функция CreateLayerAndMoveElements недоступна');
-        setInfo("info-layers", "❌ Функция недоступна (обновите плагин)");
+        AddLog('[UI] ❌ Function CreateLayerAndMoveElements is unavailable');
+        setInfo("info-layers", "❌ Function unavailable (update the plugin)");
       }
     }
 
@@ -333,13 +337,13 @@
     function RotateSelection() {
       const s = document.getElementById('rotateAngle').value;
       if (window.ACAPI && typeof ACAPI.RotateSelected === 'function') ACAPI.RotateSelected(s);
-      setInfo("info-orient", "Повернули на " + s + "°");
+      setInfo("info-orient", "Rotated by " + s + "°");
     }
-    function AlignSelectionX()         { if (ACAPI?.AlignSelectedX)         ACAPI.AlignSelectedX();         setInfo("info-orient", "Выравнивание по X"); }
-    function RandomizeAngles()         { if (ACAPI?.RandomizeSelectedAngles) ACAPI.RandomizeSelectedAngles(); setInfo("info-orient", "Случайный угол задан"); }
-    function OrientObjectsToPoint()    { if (ACAPI?.OrientObjectsToPoint)    ACAPI.OrientObjectsToPoint();    setInfo("info-orient", "Сориентированы на точку"); }
-    function SetDistributionLine()     { if (ACAPI?.SetDistributionLine)     ACAPI.SetDistributionLine();     setInfo("info-dist","Линия задана"); }
-    function SetDistributionObject()   { if (ACAPI?.SetDistributionObject)   ACAPI.SetDistributionObject();   setInfo("info-dist","Объект задан"); }
+    function AlignSelectionX()         { if (ACAPI?.AlignSelectedX)         ACAPI.AlignSelectedX();         setInfo("info-orient", "Align by X"); }
+    function RandomizeAngles()         { if (ACAPI?.RandomizeSelectedAngles) ACAPI.RandomizeSelectedAngles(); setInfo("info-orient", "Random angle applied"); }
+    function OrientObjectsToPoint()    { if (ACAPI?.OrientObjectsToPoint)    ACAPI.OrientObjectsToPoint();    setInfo("info-orient", "Oriented to point"); }
+    function SetDistributionLine()     { if (ACAPI?.SetDistributionLine)     ACAPI.SetDistributionLine();     setInfo("info-dist","Line set"); }
+    function SetDistributionObject()   { if (ACAPI?.SetDistributionObject)   ACAPI.SetDistributionObject();   setInfo("info-dist","Object set"); }
     function SetDistributionStep () {
       const s = parseNumber(document.getElementById('distStep'), 0);
       const step = (isFinite(s) && s > 0) ? s : 0;
@@ -347,8 +351,8 @@
       if (step > 0 && ACAPI?.DistributeNow) {
         const payload = "step:" + step;
         AddLog("[UI] Step OK → " + payload);
-        ACAPI.DistributeNow(payload).then(ok => setInfo("info-dist", ok ? " Разложено по шагу" : " Ошибка раскладки"));
-      } else if (step <= 0) setInfo("info-dist", "Шаг должен быть > 0");
+        ACAPI.DistributeNow(payload).then(ok => setInfo("info-dist", ok ? "Distributed by step" : "Distribution error"));
+      } else if (step <= 0) setInfo("info-dist", "Step must be > 0");
     }
     function SetDistributionCount () {
       const c = parseInt((document.getElementById('distCount').value || "0"), 10);
@@ -357,43 +361,43 @@
       if (count > 0 && ACAPI?.DistributeNow) {
         const payload = "count:" + count;
         AddLog("[UI] Count OK → " + payload);
-        ACAPI.DistributeNow(payload).then(ok => setInfo("info-dist", ok ? " Разложено по количеству" : " Ошибка раскладки"));
-      } else if (count <= 0) setInfo("info-dist", "Количество должно быть ≥ 1");
+        ACAPI.DistributeNow(payload).then(ok => setInfo("info-dist", ok ? "Distributed by count" : "Distribution error"));
+      } else if (count <= 0) setInfo("info-dist", "Count must be ≥ 1");
     }
 
     // ================= SHELL / CONTOURS =================
     function SelectBaseLine() {
       const A = window.ACAPI;
-      if (!A) { AddLog('[Shell] ACAPI недоступен'); return; }
+      if (!A) { AddLog('[Shell] ACAPI unavailable'); return; }
       if (!A.SetBaseLineForShell) {
-        AddLog('[Shell] API функция SetBaseLineForShell недоступна');
-        setInfo('info-shell', ' Функция недоступна (обновите плагин)');
+        AddLog('[Shell] API function SetBaseLineForShell is unavailable');
+        setInfo('info-shell', 'Function unavailable (update the plugin)');
         return;
       }
 
-      AddLog('[Shell] Выбор базовой линии...');
-      setInfo('info-shell', 'Выберите базовую линию (spline/polyline/дуга/линия)...');
+      AddLog('[Shell] Selecting base line...');
+      setInfo('info-shell', 'Select a base line (spline/polyline/arc/line)...');
 
       Promise.resolve(A.SetBaseLineForShell()).then(success => {
         if (success) {
-          setInfo('info-shell', ' ✅ Базовая линия выбрана!');
-          AddLog('[Shell] Базовая линия выбрана');
+          setInfo('info-shell', '✅ Base line selected!');
+          AddLog('[Shell] Base line selected');
         } else {
-          setInfo('info-shell', ' ❌ Не удалось выбрать линию');
-          AddLog('[Shell] Ошибка выбора линии');
+          setInfo('info-shell', '❌ Failed to select line');
+          AddLog('[Shell] Line selection error');
         }
       }).catch(e => {
-        AddLog('[Shell] Ошибка: ' + e);
-        setInfo('info-shell', ' ❌ Ошибка: ' + e);
+        AddLog('[Shell] Error: ' + e);
+        setInfo('info-shell', '❌ Error: ' + e);
       });
     }
 
     function CreateShellFromLine() {
       const A = window.ACAPI;
-      if (!A) { AddLog('[Shell] ACAPI недоступен'); return; }
+      if (!A) { AddLog('[Shell] ACAPI unavailable'); return; }
       if (!A.CreateShellFromLine) {
-        AddLog('[Shell] API функция недоступна');
-        setInfo('info-shell', ' Функция недоступна (обновите плагин)');
+        AddLog('[Shell] API function is unavailable');
+        setInfo('info-shell', 'Function unavailable (update the plugin)');
         return;
       }
 
@@ -401,36 +405,36 @@
       const step  = parseNumber(document.getElementById('shellStep'), 500);
       
       if (width <= 0) {
-        setInfo('info-shell', 'Ширина должна быть > 0');
+        setInfo('info-shell', 'Width must be > 0');
         return;
       }
       if (step <= 0) {
-        setInfo('info-shell', 'Шаг должен быть > 0');
+        setInfo('info-shell', 'Step must be > 0');
         return;
       }
 
-      AddLog('[Shell] Создание оболочки: ширина=' + width + 'мм, шаг=' + step + 'мм');
-      setInfo('info-shell', 'Создание оболочки...');
+      AddLog('[Shell] Creating shell: width=' + width + ' mm, step=' + step + ' mm');
+      setInfo('info-shell', 'Creating shell...');
 
       const params = "width:" + width + ",step:" + step;
-      AddLog('[Shell] Вызов ACAPI.CreateShellFromLine с параметрами: ' + params);
+      AddLog('[Shell] Calling ACAPI.CreateShellFromLine with parameters: ' + params);
       Promise.resolve(A.CreateShellFromLine(params)).then(success => {
         if (success) {
-          setInfo('info-shell', ' ✅ Оболочка создана!');
+          setInfo('info-shell', '✅ Shell created!');
           AddLog('[Shell] SUCCESS');
         } else {
-          setInfo('info-shell', ' ❌ Не удалось создать оболочку');
+          setInfo('info-shell', '❌ Failed to create shell');
           AddLog('[Shell] FAILED');
         }
       }).catch(e => {
-        AddLog('[Shell] Ошибка: ' + e);
-        setInfo('info-shell', ' ❌ Ошибка: ' + e);
+        AddLog('[Shell] Error: ' + e);
+        setInfo('info-shell', '❌ Error: ' + e);
       });
     }
 
     // ================= MARKUP/DIMENSIONS =================
     async function SetMarkupStepUI() {
-      AddLog('[UI] DEBUG: SetMarkupStepUI called');
+      AddLog('[UI] SetMarkupStepUI called');
       const A = window.ACAPI;
       if (!A) {
         AddLog('[UI] ACAPI unavailable');
@@ -438,364 +442,313 @@
       }
 
       const stepInput = document.getElementById('markupStep');
-      AddLog('[UI] DEBUG: stepInput = ' + stepInput);
       const stepStr = stepInput.value;
-      AddLog('[UI] DEBUG: stepStr = "' + stepStr + '"');
-      AddLog('[UI] DEBUG: stepInput.value = "' + stepInput.value + '"');
-      AddLog('[UI] DEBUG: stepInput.defaultValue = "' + stepInput.defaultValue + '"');
-      AddLog('[UI] DEBUG: stepInput.type = "' + stepInput.type + '"');
-      AddLog('[UI] DEBUG: stepInput.id = "' + stepInput.id + '"');
       const stepMm = parseFloat(stepStr);
-      AddLog('[UI] DEBUG: stepMm = ' + stepMm);
       
-      // Принудительно преобразуем в число
+      // Force conversion to number (diagnostics)
       const stepMmNumber = Number(stepStr);
-      AddLog('[UI] DEBUG: stepMmNumber = ' + stepMmNumber);
       
       if (isNaN(stepMm) || stepMm <= 0) {
-        AddLog('[UI] Неверное значение шага разметки');
-        setInfo("info-markup", "❌ Неверное значение шага разметки");
+        AddLog('[UI] Invalid markup step value');
+        setInfo("info-markup", "❌ Invalid markup step value");
         return;
       }
 
-      AddLog('[UI] Установка шага разметки: ' + stepMm + ' мм');
-      AddLog('[UI] DEBUG: stepMm type = ' + typeof stepMm);
-      AddLog('[UI] DEBUG: stepMm isNaN = ' + isNaN(stepMm));
-      AddLog('[UI] DEBUG: stepMm === 0 = ' + (stepMm === 0));
-      setInfo("info-markup", "Установка шага разметки...");
+      AddLog('[UI] Setting markup step: ' + stepMm + ' mm');
+      setInfo("info-markup", "Setting markup step...");
 
       if (typeof A.SetMarkupStep === 'function') {
         try {
-          AddLog('[UI] DEBUG: Calling A.SetMarkupStep(' + stepMmNumber + ')');
-          AddLog('[UI] DEBUG: stepMmNumber type=' + typeof stepMmNumber + ', value=' + stepMmNumber);
-          // Принудительно преобразуем в строку, чтобы избежать INTEGER
-          const success = await A.SetMarkupStep(stepMmNumber.toString());
+          const success = await A.SetMarkupStep(stepMmNumber.toString()); // avoid INTEGER coercion
           if (success) {
-            // Сохраняем установленное значение в глобальную переменную
             g_lastMarkupStepMm = stepMmNumber;
-            AddLog('[UI] ✅ Шаг разметки установлен: ' + stepMmNumber + ' мм');
-            setInfo("info-markup", "✅ Шаг разметки установлен: " + stepMmNumber + " мм");
+            AddLog('[UI] ✅ Markup step set: ' + stepMmNumber + ' mm');
+            setInfo("info-markup", "✅ Markup step set: " + stepMmNumber + " mm");
           } else {
-            AddLog('[UI] ❌ Ошибка установки шага разметки');
-            setInfo("info-markup", "❌ Ошибка установки шага разметки");
+            AddLog('[UI] ❌ Error setting markup step');
+            setInfo("info-markup", "❌ Error setting markup step");
           }
         } catch (err) {
-          AddLog('[UI] ❌ Ошибка вызова SetMarkupStep: ' + err);
-          setInfo("info-markup", "❌ Ошибка: " + err);
+          AddLog('[UI] ❌ Error calling SetMarkupStep: ' + err);
+          setInfo("info-markup", "❌ Error: " + err);
         }
       } else {
-        AddLog('[UI] ❌ Функция SetMarkupStep недоступна');
-        setInfo("info-markup", "❌ Функция недоступна (обновите плагин)");
+        AddLog('[UI] ❌ Function SetMarkupStep is unavailable');
+        setInfo("info-markup", "❌ Function unavailable (update the plugin)");
       }
     }
 
     async function CreateMarkupUI() {
       const A = window.ACAPI;
-      if (!A) {
-        AddLog('[UI] ACAPI unavailable');
-        return;
-      }
+      if (!A) { AddLog('[UI] ACAPI unavailable'); return; }
 
-      // Используем сохраненное значение шага (если пользователь нажимал "Set")
-      // или читаем из поля, если шаг еще не был установлен
+      // Use the saved step (if user pressed "Set"), otherwise read from field
       let stepMm = g_lastMarkupStepMm;
-      
-      // Если шаг не был установлен через "Set", читаем из поля
-      if (g_lastMarkupStepMm === 2500) { // значение по умолчанию
+      if (g_lastMarkupStepMm === 2500) {
         const stepInput = document.getElementById('markupStep');
-        const stepStr = stepInput.value;
-        const fieldStepMm = parseFloat(stepStr);
-        
+        const fieldStepMm = parseFloat(stepInput.value);
         if (!isNaN(fieldStepMm) && fieldStepMm > 0) {
           stepMm = fieldStepMm;
-          AddLog('[UI] Используем значение из поля: ' + stepMm + ' мм');
+          AddLog('[UI] Using step from field: ' + stepMm + ' mm');
         }
       } else {
-        AddLog('[UI] Используем установленный шаг: ' + stepMm + ' мм');
+        AddLog('[UI] Using previously set step: ' + stepMm + ' mm');
       }
       
-      // Устанавливаем шаг
-      AddLog('[UI] Установка шага: ' + stepMm + ' мм');
+      // Ensure step set in backend
+      AddLog('[UI] Applying step: ' + stepMm + ' mm');
       try {
         const stepSuccess = await A.SetMarkupStep(stepMm.toString());
         if (stepSuccess) {
-          g_lastMarkupStepMm = stepMm; // обновляем сохраненное значение
-          AddLog('[UI] ✅ Шаг установлен: ' + stepMm + ' мм');
+          g_lastMarkupStepMm = stepMm;
+          AddLog('[UI] ✅ Step applied: ' + stepMm + ' mm');
         } else {
-          AddLog('[UI] ❌ Ошибка установки шага');
-          setInfo("info-markup", "❌ Ошибка установки шага");
+          AddLog('[UI] ❌ Error applying step');
+          setInfo("info-markup", "❌ Error applying step");
           return;
         }
       } catch (err) {
-        AddLog('[UI] ❌ Ошибка установки шага: ' + err);
-        setInfo("info-markup", "❌ Ошибка установки шага");
+        AddLog('[UI] ❌ Error applying step: ' + err);
+        setInfo("info-markup", "❌ Error applying step");
         return;
       }
 
-      AddLog('[UI] Создание разметки');
-      setInfo("info-markup", "Создание разметки...");
+      AddLog('[UI] Creating markup');
+      setInfo("info-markup", "Creating markup...");
 
       if (typeof A.CreateMarkupDimensions === 'function') {
         try {
           const success = await A.CreateMarkupDimensions();
           if (success) {
-            AddLog('[UI] ✅ Разметка создана успешно');
-            setInfo("info-markup", "✅ Разметка создана успешно");
+            AddLog('[UI] ✅ Markup created successfully');
+            setInfo("info-markup", "✅ Markup created successfully");
           } else {
-            AddLog('[UI] ❌ Ошибка создания разметки');
-            setInfo("info-markup", "❌ Ошибка создания разметки");
+            AddLog('[UI] ❌ Error creating markup');
+            setInfo("info-markup", "❌ Error creating markup");
           }
         } catch (err) {
-          AddLog('[UI] ❌ Ошибка вызова CreateMarkupDimensions: ' + err);
-          setInfo("info-markup", "❌ Ошибка: " + err);
+          AddLog('[UI] ❌ Error calling CreateMarkupDimensions: ' + err);
+          setInfo("info-markup", "❌ Error: " + err);
         }
       } else {
-        AddLog('[UI] ❌ Функция CreateMarkupDimensions недоступна');
-        setInfo("info-markup", "❌ Функция недоступна (обновите плагин)");
+        AddLog('[UI] ❌ Function CreateMarkupDimensions is unavailable');
+        setInfo("info-markup", "❌ Function unavailable (update the plugin)");
       }
     }
 
     async function CreateDimensionsToLineUI() {
       const A = window.ACAPI;
-      if (!A) {
-        AddLog('[UI] ACAPI unavailable');
-        return;
-      }
+      if (!A) { AddLog('[UI] ACAPI unavailable'); return; }
 
-      AddLog('[UI] Создание размеров к линии');
-      setInfo("info-markup", "Создание размеров к линии...");
+      AddLog('[UI] Creating dimensions to line');
+      setInfo("info-markup", "Creating dimensions to line...");
 
       if (typeof A.CreateDimensionsToLine === 'function') {
         try {
           const success = await A.CreateDimensionsToLine();
           if (success) {
-            AddLog('[UI] ✅ Размеры к линии созданы успешно');
-            setInfo("info-markup", "✅ Размеры к линии созданы успешно");
+            AddLog('[UI] ✅ Dimensions to line created successfully');
+            setInfo("info-markup", "✅ Dimensions to line created successfully");
           } else {
-            AddLog('[UI] ❌ Ошибка создания размеров к линии');
-            setInfo("info-markup", "❌ Ошибка создания размеров к линии");
+            AddLog('[UI] ❌ Error creating dimensions to line');
+            setInfo("info-markup", "❌ Error creating dimensions to line");
           }
         } catch (err) {
-          AddLog('[UI] ❌ Ошибка вызова CreateDimensionsToLine: ' + err);
-          setInfo("info-markup", "❌ Ошибка: " + err);
+          AddLog('[UI] ❌ Error calling CreateDimensionsToLine: ' + err);
+          setInfo("info-markup", "❌ Error: " + err);
         }
       } else {
-        AddLog('[UI] ❌ Функция CreateDimensionsToLine недоступна');
-        setInfo("info-markup", "❌ Функция недоступна (обновите плагин)");
+        AddLog('[UI] ❌ Function CreateDimensionsToLine is unavailable');
+        setInfo("info-markup", "❌ Function unavailable (update the plugin)");
       }
     }
 
     async function CreateDimensionsBetweenUI() {
       const A = window.ACAPI;
-      if (!A) {
-        AddLog('[UI] ACAPI unavailable');
-        return;
-      }
+      if (!A) { AddLog('[UI] ACAPI unavailable'); return; }
 
-      AddLog('[UI] Создание размеров между объектами');
-      setInfo("info-markup", "Создание размеров между объектами...");
+      AddLog('[UI] Creating dimensions between objects');
+      setInfo("info-markup", "Creating dimensions between objects...");
 
       if (typeof A.CreateDimensionsBetweenObjects === 'function') {
         try {
           const success = await A.CreateDimensionsBetweenObjects();
           if (success) {
-            AddLog('[UI] ✅ Размеры между объектами созданы успешно');
-            setInfo("info-markup", "✅ Размеры между объектами созданы успешно");
+            AddLog('[UI] ✅ Dimensions between objects created successfully');
+            setInfo("info-markup", "✅ Dimensions between objects created successfully");
           } else {
-            AddLog('[UI] ❌ Ошибка создания размеров между объектами');
-            setInfo("info-markup", "❌ Ошибка создания размеров между объектами");
+            AddLog('[UI] ❌ Error creating dimensions between objects');
+            setInfo("info-markup", "❌ Error creating dimensions between objects");
           }
         } catch (err) {
-          AddLog('[UI] ❌ Ошибка вызова CreateDimensionsBetweenObjects: ' + err);
-          setInfo("info-markup", "❌ Ошибка: " + err);
+          AddLog('[UI] ❌ Error calling CreateDimensionsBetweenObjects: ' + err);
+          setInfo("info-markup", "❌ Error: " + err);
         }
       } else {
-        AddLog('[UI] ❌ Функция CreateDimensionsBetweenObjects недоступна');
-        setInfo("info-markup", "❌ Функция недоступна (обновите плагин)");
+        AddLog('[UI] ❌ Function CreateDimensionsBetweenObjects is unavailable');
+        setInfo("info-markup", "❌ Function unavailable (update the plugin)");
       }
     }
 
     async function CreateDimensionsToPointUI() {
       const A = window.ACAPI;
-      if (!A) {
-        AddLog('[UI] ACAPI unavailable');
-        return;
-      }
+      if (!A) { AddLog('[UI] ACAPI unavailable'); return; }
 
-      AddLog('[UI] Создание размеров к точке');
-      setInfo("info-markup", "Создание размеров к точке...");
+      AddLog('[UI] Creating dimensions to point');
+      setInfo("info-markup", "Creating dimensions to point...");
 
       if (typeof A.CreateDimensionsToPoint === 'function') {
         try {
           const success = await A.CreateDimensionsToPoint();
           if (success) {
-            AddLog('[UI] ✅ Размеры к точке созданы успешно');
-            setInfo("info-markup", "✅ Размеры к точке созданы успешно");
+            AddLog('[UI] ✅ Dimensions to point created successfully');
+            setInfo("info-markup", "✅ Dimensions to point created successfully");
           } else {
-            AddLog('[UI] ❌ Ошибка создания размеров к точке');
-            setInfo("info-markup", "❌ Ошибка создания размеров к точке");
+            AddLog('[UI] ❌ Error creating dimensions to point');
+            setInfo("info-markup", "❌ Error creating dimensions to point");
           }
         } catch (err) {
-          AddLog('[UI] ❌ Ошибка вызова CreateDimensionsToPoint: ' + err);
-          setInfo("info-markup", "❌ Ошибка: " + err);
+          AddLog('[UI] ❌ Error calling CreateDimensionsToPoint: ' + err);
+          setInfo("info-markup", "❌ Error: " + err);
         }
       } else {
-        AddLog('[UI] ❌ Функция CreateDimensionsToPoint недоступна');
-        setInfo("info-markup", "❌ Функция недоступна (обновите плагин)");
+        AddLog('[UI] ❌ Function CreateDimensionsToPoint is unavailable');
+        setInfo("info-markup", "❌ Function unavailable (update the plugin)");
       }
     }
 
     // ================= GROUNDING / OFFSET =================
     async function SetGroundSurfaceUI() {
       const A = window.ACAPI;
-      if (!A) {
-        AddLog('[UI] ACAPI unavailable');
-        return;
-      }
+      if (!A) { AddLog('[UI] ACAPI unavailable'); return; }
 
-      AddLog('[UI] Выбор 3D-сетки для приземления');
-      setInfo("info-ground", "Выбор 3D-сетки...");
+      AddLog('[UI] Selecting 3D mesh for landing');
+      setInfo("info-ground", "Selecting 3D mesh...");
 
       if (typeof A.SetGroundSurface === 'function') {
         try {
           const success = await A.SetGroundSurface();
           if (success) {
-            AddLog('[UI] ✅ 3D-сетка выбрана успешно');
-            setInfo("info-ground", "✅ 3D-сетка выбрана. Теперь выберите объекты и нажмите 'Приземлить'");
+            AddLog('[UI] ✅ 3D mesh selected successfully');
+            setInfo("info-ground", "✅ 3D mesh selected. Now select objects and click 'Land'");
           } else {
-            AddLog('[UI] ❌ Ошибка выбора 3D-сетки');
-            setInfo("info-ground", "❌ Ошибка выбора 3D-сетки");
+            AddLog('[UI] ❌ Error selecting 3D mesh');
+            setInfo("info-ground", "❌ Error selecting 3D mesh");
           }
         } catch (err) {
-          AddLog('[UI] ❌ Ошибка вызова SetGroundSurface: ' + err);
-          setInfo("info-ground", "❌ Ошибка: " + err);
+          AddLog('[UI] ❌ Error calling SetGroundSurface: ' + err);
+          setInfo("info-ground", "❌ Error: " + err);
         }
       } else {
-        AddLog('[UI] ❌ Функция SetGroundSurface недоступна');
-        setInfo("info-ground", "❌ Функция недоступна (обновите плагин)");
+        AddLog('[UI] ❌ Function SetGroundSurface is unavailable');
+        setInfo("info-ground", "❌ Function unavailable (update the plugin)");
       }
     }
 
     async function SetGroundObjectsUI() {
       const A = window.ACAPI;
-      if (!A) {
-        AddLog('[UI] ACAPI unavailable');
-        return;
-      }
+      if (!A) { AddLog('[UI] ACAPI unavailable'); return; }
 
-      AddLog('[UI] Выбор объектов для приземления');
-      setInfo("info-ground", "Выбор объектов...");
+      AddLog('[UI] Selecting objects for landing');
+      setInfo("info-ground", "Selecting objects...");
 
       if (typeof A.SetGroundObjects === 'function') {
         try {
           const success = await A.SetGroundObjects();
           if (success) {
-            AddLog('[UI] ✅ Объекты выбраны успешно');
-            setInfo("info-ground", "✅ Объекты выбраны. Теперь нажмите 'Приземлить'");
+            AddLog('[UI] ✅ Objects selected successfully');
+            setInfo("info-ground", "✅ Objects selected. Now click 'Land'");
           } else {
-            AddLog('[UI] ❌ Ошибка выбора объектов');
-            setInfo("info-ground", "❌ Ошибка выбора объектов");
+            AddLog('[UI] ❌ Error selecting objects');
+            setInfo("info-ground", "❌ Error selecting objects");
           }
         } catch (err) {
-          AddLog('[UI] ❌ Ошибка вызова SetGroundObjects: ' + err);
-          setInfo("info-ground", "❌ Ошибка: " + err);
+          AddLog('[UI] ❌ Error calling SetGroundObjects: ' + err);
+          setInfo("info-ground", "❌ Error: " + err);
         }
       } else {
-        AddLog('[UI] ❌ Функция SetGroundObjects недоступна');
-        setInfo("info-ground", "❌ Функция недоступна (обновите плагин)");
+        AddLog('[UI] ❌ Function SetGroundObjects is unavailable');
+        setInfo("info-ground", "❌ Function unavailable (update the plugin)");
       }
     }
 
     async function ApplyZDeltaUI() {
-  AddLog('[UI] ===== ApplyZDeltaUI START =====');
-  const A = window.ACAPI;
-  if (!A) {
-    AddLog('[UI] ACAPI недоступен');
-    return;
-  }
-
-  const offsetStr = document.getElementById('groundOffset').value;
-  AddLog('[UI] DEBUG: groundOffset.value = "' + offsetStr + '"');
-  const offsetMm  = parseFloat(offsetStr);
-  AddLog('[UI] DEBUG: parseFloat result = ' + offsetMm);
-  if (isNaN(offsetMm)) {
-    AddLog('[UI] Неверное значение смещения');
-    setInfo("info-ground", "❌ Неверное значение смещения");
-    return;
-  }
-
-  const offsetM = offsetMm / 1000.0;
-  AddLog('[UI] Применение смещения Z: ' + offsetMm + ' мм (' + offsetM + ' м)');
-  setInfo("info-ground", "Применение смещения...");
-
-  if (typeof A.ApplyZDelta === 'function') {
-    try {
-      AddLog('[UI] DEBUG: Вызываем A.ApplyZDelta(' + offsetM + ')');
-      AddLog('[UI] DEBUG: offsetM type=' + typeof offsetM + ', value=' + offsetM);
-      // Принудительно преобразуем в строку, чтобы избежать INTEGER
-      const success = await A.ApplyZDelta(offsetM.toString());
-      AddLog('[UI] DEBUG: A.ApplyZDelta вернул: ' + success);
-      if (success) {
-        AddLog('[UI] ✅ Смещение применено успешно');
-        setInfo("info-ground", "✅ Смещение применено: " + offsetMm + " мм");
-      } else {
-        AddLog('[UI] ❌ Ошибка применения смещения');
-        setInfo("info-ground", "❌ Ошибка применения смещения (проверьте выделение)");
-      }
-    } catch (err) {
-      AddLog('[UI] ❌ Ошибка вызова ApplyZDelta: ' + err);
-      setInfo("info-ground", "❌ Ошибка: " + err);
-    }
-  } else {
-    AddLog('[UI] ❌ Функция ApplyZDelta недоступна');
-    setInfo("info-ground", "❌ Функция недоступна (обновите плагин)");
-  }
-}
-
-
-    async function LandToMeshUI() {
+      AddLog('[UI] ===== ApplyZDeltaUI START =====');
       const A = window.ACAPI;
-      if (!A) {
-        AddLog('[UI] ACAPI unavailable');
+      if (!A) { AddLog('[UI] ACAPI unavailable'); return; }
+
+      const offsetStr = document.getElementById('groundOffset').value;
+      AddLog('[UI] DEBUG: groundOffset.value = "' + offsetStr + '"');
+      const offsetMm  = parseFloat(offsetStr);
+      AddLog('[UI] DEBUG: parseFloat result = ' + offsetMm);
+      if (isNaN(offsetMm)) {
+        AddLog('[UI] Invalid offset value');
+        setInfo("info-ground", "❌ Invalid offset value");
         return;
       }
 
-      AddLog('[UI] Приземление на 3D-сетку');
-      setInfo("info-ground", "Приземление на 3D-сетку...");
+      const offsetM = offsetMm / 1000.0;
+      AddLog('[UI] Applying Z offset: ' + offsetMm + ' mm (' + offsetM + ' m)');
+      setInfo("info-ground", "Applying offset...");
 
-      // Сначала автоматически устанавливаем 3D-сетку и объекты из текущего выделения
+      if (typeof A.ApplyZDelta === 'function') {
+        try {
+          AddLog('[UI] DEBUG: Calling A.ApplyZDelta(' + offsetM + ')');
+          const success = await A.ApplyZDelta(offsetM.toString()); // avoid INTEGER coercion
+          AddLog('[UI] DEBUG: A.ApplyZDelta returned: ' + success);
+          if (success) {
+            AddLog('[UI] ✅ Offset applied successfully');
+            setInfo("info-ground", "✅ Offset applied: " + offsetMm + " mm");
+          } else {
+            AddLog('[UI] ❌ Error applying offset');
+            setInfo("info-ground", "❌ Error applying offset (check selection)");
+          }
+        } catch (err) {
+          AddLog('[UI] ❌ Error calling ApplyZDelta: ' + err);
+          setInfo("info-ground", "❌ Error: " + err);
+        }
+      } else {
+        AddLog('[UI] ❌ Function ApplyZDelta is unavailable');
+        setInfo("info-ground", "❌ Function unavailable (update the plugin)");
+      }
+    }
+
+    async function LandToMeshUI() {
+      const A = window.ACAPI;
+      if (!A) { AddLog('[UI] ACAPI unavailable'); return; }
+
+      AddLog('[UI] Landing to 3D mesh');
+      setInfo("info-ground", "Landing to 3D mesh...");
+
       try {
-        // Устанавливаем 3D-сетку
-        AddLog('[UI] Установка 3D-сетки из выделения...');
+        AddLog('[UI] Setting 3D mesh from selection...');
         const surfaceSuccess = await A.SetGroundSurface();
         if (!surfaceSuccess) {
-          AddLog('[UI] ❌ Не удалось установить 3D-сетку');
-          setInfo("info-ground", "❌ Не удалось установить 3D-сетку. Убедитесь, что в выделении есть 3D-сетка");
+          AddLog('[UI] ❌ Failed to set 3D mesh');
+          setInfo("info-ground", "❌ Failed to set 3D mesh. Make sure a 3D mesh is selected");
           return;
         }
 
-        // Устанавливаем объекты
-        AddLog('[UI] Установка объектов из выделения...');
+        AddLog('[UI] Setting objects from selection...');
         const objectsSuccess = await A.SetGroundObjects();
         if (!objectsSuccess) {
-          AddLog('[UI] ❌ Не удалось установить объекты');
-          setInfo("info-ground", "❌ Не удалось установить объекты. Убедитесь, что в выделении есть объекты для приземления");
+          AddLog('[UI] ❌ Failed to set objects');
+          setInfo("info-ground", "❌ Failed to set objects. Make sure landing objects are selected");
           return;
         }
 
-        // Теперь выполняем приземление
-        AddLog('[UI] Выполнение приземления...');
+        AddLog('[UI] Performing landing...');
         const success = await A.ApplyGroundOffset(0.0);
         if (success) {
-          AddLog('[UI] ✅ Приземление выполнено успешно');
-          setInfo("info-ground", "✅ Объекты приземлены на 3D-сетку");
+          AddLog('[UI] ✅ Landing completed successfully');
+          setInfo("info-ground", "✅ Objects landed on 3D mesh");
         } else {
-          AddLog('[UI] ❌ Ошибка приземления');
-          setInfo("info-ground", "❌ Ошибка приземления");
+          AddLog('[UI] ❌ Landing error');
+          setInfo("info-ground", "❌ Landing error");
         }
       } catch (err) {
-        AddLog('[UI] ❌ Ошибка: ' + err);
-        setInfo("info-ground", "❌ Ошибка: " + err);
+        AddLog('[UI] ❌ Error: ' + err);
+        setInfo("info-ground", "❌ Error: " + err);
       }
     }
 
@@ -824,24 +777,23 @@
 
     window.addEventListener('DOMContentLoaded', function () {
       AddLog("[UI] Ready (UI v0.4)");
-      AddLog("[UI] Поле для логов восстановлено и готово к работе!");
 
-      // Enter-нажатия для числовых полей
+      // Enter handlers
       document.getElementById('distStep')    ?.addEventListener('keydown', e => { if (e.key === 'Enter') SetDistributionStep(); });
       document.getElementById('distCount')   ?.addEventListener('keydown', e => { if (e.key === 'Enter') SetDistributionCount(); });
       document.getElementById('groundOffset')?.addEventListener('keydown', e => { if (e.key === 'Enter') whenACAPIReadyDo(ApplyZDeltaUI); });
       document.getElementById('shellWidth')  ?.addEventListener('keydown', e => { if (e.key === 'Enter') CreateShellFromLine(); });
       document.getElementById('shellStep')   ?.addEventListener('keydown', e => { if (e.key === 'Enter') CreateShellFromLine(); });
 
-      // Enter для ID только внутри вкладки Слои (ID)
+      // ID + Layers tab
       document.getElementById('baseID')      ?.addEventListener('keydown', e => { if (e.key === 'Enter') changeAllSelectedIDs(); });
       document.getElementById('layerFolder') ?.addEventListener('keydown', e => { if (e.key === 'Enter') createLayerAndMoveElements(); });
       document.getElementById('layerName')   ?.addEventListener('keydown', e => { if (e.key === 'Enter') createLayerAndMoveElements(); });
       
-      // Enter для разметки
+      // Markup
       document.getElementById('markupStep')  ?.addEventListener('keydown', e => { if (e.key === 'Enter') whenACAPIReadyDo(SetMarkupStepUI); });
 
-      // help-кнопки (делегирование)
+      // help buttons
       document.addEventListener('click', function (e) {
         const el = e.target.closest('[data-help-url]');
         if (!el) return;
@@ -859,17 +811,17 @@
             .then(() => AddLog('[UI] ACAPI.OpenHelp ok'))
             .catch(err => AddLog('[UI] ACAPI.OpenHelp error: ' + err));
         } else {
-          AddLog('[UI] ACAPI.OpenHelp не найден → window.open');
+          AddLog('[UI] ACAPI.OpenHelp not found → window.open');
           window.open(url, '_blank', 'noopener,noreferrer');
         }
       });
 
-      // ждём мост и только затем обновляем таблицу
+      // wait for bridge, then fill selection table
       whenACAPIReadyDo(() => {
         UpdateSelectedElements();
       });
 
-      // по умолчанию открываем Распределение
+      // default tab: Distribution
       const distribTab = document.querySelector('button[onclick*="tab-distrib"]');
       if (distribTab) distribTab.click();
     });
@@ -877,7 +829,7 @@
 </head>
 
 <body>
-  <!-- Логотип LANDSCAPE HELPER -->
+  <!-- LANDSCAPE HELPER Logo -->
   <div class="logo-container">
     <div class="logo-icon">
       <div class="mountain"></div>
@@ -1048,7 +1000,7 @@
           1. Click "Select Line" and choose base line<br>
           2. Set contour width<br>
           3. Click button to create contours<br>
-          <strong>Note:</strong> For spline step is needed, for other lines - only width
+          <strong>Note:</strong> For spline step is needed, for other lines—only width
         </p>
       </div>
 
@@ -1120,7 +1072,6 @@
 
   <!-- Layers -->
   <div id="tab-layers" class="tabcontent">
-    <!-- Create folder/layer + move elements -->
     <fieldset class="control-block">
       <legend>Create Folder/Layer and Move Elements</legend>
 
@@ -1168,7 +1119,9 @@
             data-help-title="Help: Layers and ID">Help</button>
   </div>
 
+  <!-- COMMENTED OUT: Black log strip
   <div id="log-box">[Plugin log will appear here]</div>
+  -->
 
   <a href="#"
      data-help-url="https://landscape.227.info/?embed=1"
