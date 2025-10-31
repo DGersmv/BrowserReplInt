@@ -14,6 +14,7 @@
 #include "RoadHelper.hpp"
 #include "HelpPalette.hpp"
 #include "LayerHelper.hpp"
+#include "ColumnOrientHelper.hpp"
 
 
 
@@ -410,6 +411,20 @@ void BrowserRepl::RegisterACAPIJavaScriptObject()
 			BrowserRepl::GetInstance().LogToBrowser(GS::UniString::Printf("[JS] DistributeNow parsed: step=%.6f, count=%d", step, count));
 		}
 		return new JS::Value(LandscapeHelper::DistributeSelected(step, count));
+		}));
+
+	// --- Column Orientation API ---
+	jsACAPI->AddItem(new JS::Function("SetColumns", [](GS::Ref<JS::Base>) {
+		if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser("[JS] SetColumns()");
+		return new JS::Value(ColumnOrientHelper::SetColumns());
+		}));
+	jsACAPI->AddItem(new JS::Function("SetMeshForColumns", [](GS::Ref<JS::Base>) {
+		if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser("[JS] SetMeshForColumns()");
+		return new JS::Value(ColumnOrientHelper::SetMesh());
+		}));
+	jsACAPI->AddItem(new JS::Function("OrientColumnsToSurface", [](GS::Ref<JS::Base>) {
+		if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser("[JS] OrientColumnsToSurface()");
+		return new JS::Value(ColumnOrientHelper::OrientColumnsToSurface());
 		}));
 
 	// --- Help / Log ---
