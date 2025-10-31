@@ -906,6 +906,34 @@
       }
     }
 
+    // ================= MESH CREATION =================
+    async function CreateMeshUI() {
+      const A = window.ACAPI;
+      if (!A) { AddLog('[UI] ACAPI unavailable'); return; }
+
+      AddLog('[UI] Creating mesh');
+      setInfo("info-mesh", "Creating mesh...");
+
+      if (typeof A.CreateMesh === 'function') {
+        try {
+          const success = await A.CreateMesh();
+          if (success) {
+            AddLog('[UI] ✅ Mesh created successfully');
+            setInfo("info-mesh", "✅ Mesh created successfully");
+          } else {
+            AddLog('[UI] ❌ Error creating mesh');
+            setInfo("info-mesh", "❌ Error creating mesh");
+          }
+        } catch (err) {
+          AddLog('[UI] ❌ Error calling CreateMesh: ' + err);
+          setInfo("info-mesh", "❌ Error: " + err);
+        }
+      } else {
+        AddLog('[UI] ❌ Function CreateMesh is unavailable');
+        setInfo("info-mesh", "❌ Function unavailable (update the plugin)");
+      }
+    }
+
     function onShift(mm) {
       const m = parseFloat(mm) / 1000;
       AddLog(`[UI] Shift click, delta=${m} m`);
@@ -1013,6 +1041,7 @@
     <button class="tablink" onclick="openTab(event,'tab-id')">ID</button>
     <button class="tablink" onclick="openTab(event,'tab-layers')">Layers</button>
     <button class="tablink" onclick="openTab(event,'tab-columns')">Angle</button>
+    <button class="tablink" onclick="openTab(event,'tab-mesh')">Mesh</button>
   </div>
 
   <!-- Distribution -->
@@ -1333,6 +1362,27 @@
     <button class="tab-help"
             data-help-url="https://landscape.227.info/help/columns"
             data-help-title="Help: Column/Beam Orientation">Help</button>
+  </div>
+
+  <!-- Mesh -->
+  <div id="tab-mesh" class="tabcontent">
+    <fieldset class="control-block">
+      <legend>Mesh Creation</legend>
+      <div style="text-align:center; margin-bottom:15px;">
+        <input type="button" 
+               onclick="whenACAPIReadyDo(CreateMeshUI)" 
+               value="Create Mesh"
+               style="font-size:16px; padding:10px 25px; font-weight:bold; background:#4F604F; color:white; border:none; border-radius:4px; cursor:pointer;">
+      </div>
+      <div id="info-mesh" class="info-box">
+        <strong>Instructions:</strong><br>
+        Click "Create Mesh" to create a simple mesh element (10x10 meters plane at level 0).
+      </div>
+    </fieldset>
+
+    <button class="tab-help"
+            data-help-url="https://landscape.227.info/help/mesh"
+            data-help-title="Help: Mesh Creation">Help</button>
   </div>
 
   <!-- Black log strip -->

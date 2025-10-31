@@ -15,6 +15,7 @@
 #include "HelpPalette.hpp"
 #include "LayerHelper.hpp"
 #include "ColumnOrientHelper.hpp"
+#include "MeshHelper.hpp"
 
 
 
@@ -551,6 +552,12 @@ void BrowserRepl::RegisterACAPIJavaScriptObject()
 		
 		const bool success = RoadHelper::SetTerrainMesh();
 		return new JS::Value(success);
+		}));
+
+	// --- Mesh API (создание Mesh) ---
+	jsACAPI->AddItem(new JS::Function("CreateMesh", [](GS::Ref<JS::Base>) {
+		if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser("[JS] CreateMesh()");
+		return new JS::Value(MeshHelper::CreateMesh());
 		}));
 
 	// --- Road API (создание дорожки по линии) ---
