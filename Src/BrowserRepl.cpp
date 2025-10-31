@@ -48,7 +48,7 @@ static GS::UniString LoadHtmlFromResource()
 }
 
 // --- Extract double from JS::Base (supports 123 / "123.4" / "123,4") ---
-// Общий хелпер: вытащить double из JS::Base (поддерживает number, string "3,5"/"3.5", bool, а также массив аргументов)
+// Общий хелпер: вытащить double из JS::Base (поддерживает number, string "3,5"/"3.5", bool)
 static double GetDoubleFromJs(GS::Ref<JS::Base> p, double def = 0.0)
 {
 	if (p == nullptr) {
@@ -63,7 +63,8 @@ static double GetDoubleFromJs(GS::Ref<JS::Base> p, double def = 0.0)
 		}
 		
 		if (t == JS::Value::INTEGER) {
-			return v->GetDouble();
+			// Для INTEGER используем GetDouble(), но также можно попробовать GetInteger() если есть
+			return static_cast<double>(v->GetInteger());
 		}
 
 		if (t == JS::Value::STRING) {
@@ -413,10 +414,14 @@ void BrowserRepl::RegisterACAPIJavaScriptObject()
 		return new JS::Value(LandscapeHelper::DistributeSelected(step, count));
 		}));
 
-	// --- Column Orientation API ---
+	// --- Column/Beam Orientation API ---
 	jsACAPI->AddItem(new JS::Function("SetColumns", [](GS::Ref<JS::Base>) {
 		if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser("[JS] SetColumns()");
 		return new JS::Value(ColumnOrientHelper::SetColumns());
+		}));
+	jsACAPI->AddItem(new JS::Function("SetBeams", [](GS::Ref<JS::Base>) {
+		if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser("[JS] SetBeams()");
+		return new JS::Value(ColumnOrientHelper::SetBeams());
 		}));
 	jsACAPI->AddItem(new JS::Function("SetMeshForColumns", [](GS::Ref<JS::Base>) {
 		if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser("[JS] SetMeshForColumns()");
@@ -425,6 +430,43 @@ void BrowserRepl::RegisterACAPIJavaScriptObject()
 	jsACAPI->AddItem(new JS::Function("OrientColumnsToSurface", [](GS::Ref<JS::Base>) {
 		if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser("[JS] OrientColumnsToSurface()");
 		return new JS::Value(ColumnOrientHelper::OrientColumnsToSurface());
+		}));
+	jsACAPI->AddItem(new JS::Function("OrientBeamsToSurface", [](GS::Ref<JS::Base>) {
+		if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser("[JS] OrientBeamsToSurface()");
+		return new JS::Value(ColumnOrientHelper::OrientBeamsToSurface());
+		}));
+	jsACAPI->AddItem(new JS::Function("RotateSelectedOrientation", [](GS::Ref<JS::Base> param) {
+		// Диагностика параметра (для отладки)
+		double angleDeg = 0.0;
+		if (BrowserRepl::HasInstance()) {
+			if (param == nullptr) {
+				BrowserRepl::GetInstance().LogToBrowser("[JS] RotateSelectedOrientation: param is nullptr!");
+			} else if (GS::Ref<JS::Value> v = GS::DynamicCast<JS::Value>(param)) {
+				const auto t = v->GetType();
+				if (t == JS::Value::DOUBLE) {
+					angleDeg = v->GetDouble();
+					BrowserRepl::GetInstance().LogToBrowser(GS::UniString::Printf("[JS] RotateSelectedOrientation: got DOUBLE %.6f", angleDeg));
+				} else if (t == JS::Value::INTEGER) {
+					angleDeg = static_cast<double>(v->GetInteger());
+					BrowserRepl::GetInstance().LogToBrowser(GS::UniString::Printf("[JS] RotateSelectedOrientation: got INTEGER %d -> %.6f", (int)v->GetInteger(), angleDeg));
+				} else if (t == JS::Value::STRING) {
+					BrowserRepl::GetInstance().LogToBrowser("[JS] RotateSelectedOrientation: got string '" + v->GetString() + "'");
+					angleDeg = GetDoubleFromJs(param, 0.0);
+				} else {
+					BrowserRepl::GetInstance().LogToBrowser(GS::UniString::Printf("[JS] RotateSelectedOrientation: got unknown type %d", (int)t));
+					angleDeg = GetDoubleFromJs(param, 0.0);
+				}
+			} else {
+				BrowserRepl::GetInstance().LogToBrowser("[JS] RotateSelectedOrientation: param is not JS::Value, using GetDoubleFromJs");
+				angleDeg = GetDoubleFromJs(param, 0.0);
+			}
+		} else {
+			angleDeg = GetDoubleFromJs(param, 0.0);
+		}
+		
+		if (BrowserRepl::HasInstance())
+			BrowserRepl::GetInstance().LogToBrowser(GS::UniString::Printf("[JS] RotateSelectedOrientation final: angleDeg=%.3f", angleDeg));
+		return new JS::Value(ColumnOrientHelper::RotateSelected(angleDeg));
 		}));
 
 	// --- Help / Log ---

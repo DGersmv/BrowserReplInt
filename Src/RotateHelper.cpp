@@ -29,6 +29,10 @@ bool RotateSelected (double angleDeg)
 
             API_Element mask; ACAPI_ELEMENT_MASK_CLEAR(mask);
 
+            API_ElementMemo memo{};
+            bool needsMemo = false;
+            bool hasMemo = false;
+            
             switch (element.header.type.typeID) {
             case API_ColumnID:
                 element.column.axisRotationAngle += addRad;
@@ -42,10 +46,33 @@ bool RotateSelected (double angleDeg)
                 element.lamp.angle += addRad;
                 ACAPI_ELEMENT_MASK_SET(mask, API_LampType, angle);
                 break;
+            case API_BeamID: {
+                // Поворот балки в плоскости XY - меняем направление begC -> endC
+                const double dx = element.beam.endC.x - element.beam.begC.x;
+                const double dy = element.beam.endC.y - element.beam.begC.y;
+                const double beamLength = std::hypot(dx, dy);
+                const double currentAngle = std::atan2(dy, dx);
+                const double newAngle = currentAngle + addRad;
+                
+                element.beam.endC.x = element.beam.begC.x + beamLength * std::cos(newAngle);
+                element.beam.endC.y = element.beam.begC.y + beamLength * std::sin(newAngle);
+                
+                ACAPI_ELEMENT_MASK_SET(mask, API_BeamType, begC);
+                ACAPI_ELEMENT_MASK_SET(mask, API_BeamType, endC);
+                needsMemo = true;
+                hasMemo = (ACAPI_Element_GetMemo(n.guid, &memo, APIMemoMask_All) == NoError);
+                break;
+            }
             default:
                 continue;
             }
-            (void)ACAPI_Element_Change(&element, &mask, nullptr, 0, true);
+            
+            if (needsMemo && hasMemo) {
+                (void)ACAPI_Element_Change(&element, &mask, &memo, 0, true);
+                ACAPI_DisposeElemMemoHdls(&memo);
+            } else {
+                (void)ACAPI_Element_Change(&element, &mask, nullptr, 0, true);
+            }
         }
         return NoError;
     });
@@ -71,13 +98,48 @@ bool AlignSelectedX ()
 
             API_Element mask; ACAPI_ELEMENT_MASK_CLEAR(mask);
 
+            API_ElementMemo memo{};
+            bool needsMemo = false;
+            bool hasMemo = false;
+            
             switch (element.header.type.typeID) {
-            case API_ColumnID: element.column.axisRotationAngle = 0.0; ACAPI_ELEMENT_MASK_SET(mask, API_ColumnType, axisRotationAngle); break;
-            case API_ObjectID: element.object.angle = 0.0; ACAPI_ELEMENT_MASK_SET(mask, API_ObjectType, angle); break;
-            case API_LampID:   element.lamp.angle = 0.0;   ACAPI_ELEMENT_MASK_SET(mask, API_LampType, angle); break;
-            default: continue;
+            case API_ColumnID: 
+                element.column.axisRotationAngle = 0.0; 
+                ACAPI_ELEMENT_MASK_SET(mask, API_ColumnType, axisRotationAngle); 
+                break;
+            case API_ObjectID: 
+                element.object.angle = 0.0; 
+                ACAPI_ELEMENT_MASK_SET(mask, API_ObjectType, angle); 
+                break;
+            case API_LampID:   
+                element.lamp.angle = 0.0;   
+                ACAPI_ELEMENT_MASK_SET(mask, API_LampType, angle); 
+                break;
+            case API_BeamID: {
+                // Выравнивание балки по X - поворачиваем в плоскости XY
+                const double dx = element.beam.endC.x - element.beam.begC.x;
+                const double dy = element.beam.endC.y - element.beam.begC.y;
+                const double beamLength = std::hypot(dx, dy);
+                
+                element.beam.endC.x = element.beam.begC.x + beamLength; // Вдоль оси X
+                element.beam.endC.y = element.beam.begC.y;              // Y не меняется
+                
+                ACAPI_ELEMENT_MASK_SET(mask, API_BeamType, begC);
+                ACAPI_ELEMENT_MASK_SET(mask, API_BeamType, endC);
+                needsMemo = true;
+                hasMemo = (ACAPI_Element_GetMemo(n.guid, &memo, APIMemoMask_All) == NoError);
+                break;
             }
-            (void)ACAPI_Element_Change(&element, &mask, nullptr, 0, true);
+            default: 
+                continue;
+            }
+            
+            if (needsMemo && hasMemo) {
+                (void)ACAPI_Element_Change(&element, &mask, &memo, 0, true);
+                ACAPI_DisposeElemMemoHdls(&memo);
+            } else {
+                (void)ACAPI_Element_Change(&element, &mask, nullptr, 0, true);
+            }
         }
         return NoError;
     });
@@ -109,13 +171,48 @@ bool RandomizeSelectedAngles ()
 
             API_Element mask; ACAPI_ELEMENT_MASK_CLEAR(mask);
 
+            API_ElementMemo memo{};
+            bool needsMemo = false;
+            bool hasMemo = false;
+            
             switch (element.header.type.typeID) {
-            case API_ObjectID: element.object.angle = rnd; ACAPI_ELEMENT_MASK_SET(mask, API_ObjectType, angle); break;
-            case API_LampID:   element.lamp.angle = rnd;   ACAPI_ELEMENT_MASK_SET(mask, API_LampType, angle); break;
-            case API_ColumnID: element.column.axisRotationAngle = rnd; ACAPI_ELEMENT_MASK_SET(mask, API_ColumnType, axisRotationAngle); break;
-            default: continue;
+            case API_ObjectID: 
+                element.object.angle = rnd; 
+                ACAPI_ELEMENT_MASK_SET(mask, API_ObjectType, angle); 
+                break;
+            case API_LampID:   
+                element.lamp.angle = rnd;   
+                ACAPI_ELEMENT_MASK_SET(mask, API_LampType, angle); 
+                break;
+            case API_ColumnID: 
+                element.column.axisRotationAngle = rnd; 
+                ACAPI_ELEMENT_MASK_SET(mask, API_ColumnType, axisRotationAngle); 
+                break;
+            case API_BeamID: {
+                // Случайный поворот балки в плоскости XY
+                const double dx = element.beam.endC.x - element.beam.begC.x;
+                const double dy = element.beam.endC.y - element.beam.begC.y;
+                const double beamLength = std::hypot(dx, dy);
+                
+                element.beam.endC.x = element.beam.begC.x + beamLength * std::cos(rnd);
+                element.beam.endC.y = element.beam.begC.y + beamLength * std::sin(rnd);
+                
+                ACAPI_ELEMENT_MASK_SET(mask, API_BeamType, begC);
+                ACAPI_ELEMENT_MASK_SET(mask, API_BeamType, endC);
+                needsMemo = true;
+                hasMemo = (ACAPI_Element_GetMemo(n.guid, &memo, APIMemoMask_All) == NoError);
+                break;
             }
-            (void)ACAPI_Element_Change(&element, &mask, nullptr, 0, true);
+            default: 
+                continue;
+            }
+            
+            if (needsMemo && hasMemo) {
+                (void)ACAPI_Element_Change(&element, &mask, &memo, 0, true);
+                ACAPI_DisposeElemMemoHdls(&memo);
+            } else {
+                (void)ACAPI_Element_Change(&element, &mask, nullptr, 0, true);
+            }
         }
         return NoError;
     });
@@ -149,6 +246,7 @@ bool OrientObjectsToPoint ()
             case API_ObjectID: objPos = element.object.pos; break;
             case API_LampID:   objPos = element.lamp.pos;   break;
             case API_ColumnID: objPos.x = element.column.origoPos.x; objPos.y = element.column.origoPos.y; break;
+            case API_BeamID:   objPos = element.beam.begC; break;  // Используем начальную точку балки
             default: continue;
             }
 
@@ -157,13 +255,48 @@ bool OrientObjectsToPoint ()
             const double newAngle = std::atan2(dy, dx);
 
             API_Element mask; ACAPI_ELEMENT_MASK_CLEAR(mask);
+            API_ElementMemo memo{};
+            bool needsMemo = false;
+            bool hasMemo = false;
+            
             switch (element.header.type.typeID) {
-            case API_ObjectID: element.object.angle = newAngle; ACAPI_ELEMENT_MASK_SET(mask, API_ObjectType, angle); break;
-            case API_LampID:   element.lamp.angle = newAngle;   ACAPI_ELEMENT_MASK_SET(mask, API_LampType, angle);   break;
-            case API_ColumnID: element.column.axisRotationAngle = newAngle; ACAPI_ELEMENT_MASK_SET(mask, API_ColumnType, axisRotationAngle); break;
-            default: continue;
+            case API_ObjectID: 
+                element.object.angle = newAngle; 
+                ACAPI_ELEMENT_MASK_SET(mask, API_ObjectType, angle); 
+                break;
+            case API_LampID:   
+                element.lamp.angle = newAngle;   
+                ACAPI_ELEMENT_MASK_SET(mask, API_LampType, angle);   
+                break;
+            case API_ColumnID: 
+                element.column.axisRotationAngle = newAngle; 
+                ACAPI_ELEMENT_MASK_SET(mask, API_ColumnType, axisRotationAngle); 
+                break;
+            case API_BeamID: {
+                // Ориентация балки в плоскости XY - направляем begC -> endC к целевой точке
+                const double beamDx = element.beam.endC.x - element.beam.begC.x;
+                const double beamDy = element.beam.endC.y - element.beam.begC.y;
+                const double beamLength = std::hypot(beamDx, beamDy);
+                
+                element.beam.endC.x = element.beam.begC.x + beamLength * std::cos(newAngle);
+                element.beam.endC.y = element.beam.begC.y + beamLength * std::sin(newAngle);
+                
+                ACAPI_ELEMENT_MASK_SET(mask, API_BeamType, begC);
+                ACAPI_ELEMENT_MASK_SET(mask, API_BeamType, endC);
+                needsMemo = true;
+                hasMemo = (ACAPI_Element_GetMemo(n.guid, &memo, APIMemoMask_All) == NoError);
+                break;
             }
-            (void)ACAPI_Element_Change(&element, &mask, nullptr, 0, true);
+            default: 
+                continue;
+            }
+            
+            if (needsMemo && hasMemo) {
+                (void)ACAPI_Element_Change(&element, &mask, &memo, 0, true);
+                ACAPI_DisposeElemMemoHdls(&memo);
+            } else {
+                (void)ACAPI_Element_Change(&element, &mask, nullptr, 0, true);
+            }
         }
         return NoError;
     });

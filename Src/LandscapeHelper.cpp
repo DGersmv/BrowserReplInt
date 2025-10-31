@@ -439,10 +439,17 @@ namespace LandscapeHelper {
 			API_Coord P; double ang = 0.0;
 			EvalOnPath(segs, s, &P, &ang);
 
-			API_Element e = proto; e.header.guid = APINULLGuid;
+			API_Element e = proto; 
+			e.header.guid = APINULLGuid;  // Важно: сбрасываем GUID для создания нового элемента
 
-			if (tid == API_ObjectID) { e.object.pos = P;  e.object.angle = ang; }
-			else if (tid == API_LampID) { e.lamp.pos = P;  e.lamp.angle = ang; }
+			if (tid == API_ObjectID) { 
+				e.object.pos = P;  
+				e.object.angle = ang; 
+			}
+			else if (tid == API_LampID) { 
+				e.lamp.pos = P;  
+				e.lamp.angle = ang; 
+			}
 			else if (tid == API_BeamID) {
 				// Балка: вычисляем конечную точку на основе длины из прототипа и угла
 				const double beamLen = std::hypot(
@@ -453,14 +460,28 @@ namespace LandscapeHelper {
 				e.beam.endC.y = P.y + beamLen * std::sin(ang);
 			}
 			else if (tid == API_ColumnID) { 
+				// Колонна: устанавливаем позицию и угол поворота
+				// Важно: сохраняем все параметры из прототипа (bottomOffset, topOffset, floorInd и т.д.)
 				e.column.origoPos = P; 
 				e.column.axisRotationAngle = ang;
+				// Явно сохраняем этаж из прототипа (должен скопироваться, но для надежности)
+				// e.header.floorInd уже скопирован из proto через e = proto
 			}
 
 			const GSErrCode ce = ACAPI_Element_Create(&e, protoMemo);
-			if (ce == NoError) ++created;
+			if (ce == NoError) {
+				++created;
+				if (tid == API_ColumnID) {
+					GS::UniString colDbg; colDbg.Printf("[Distrib] Column created at (%.3f, %.3f), floor=%d, ang=%.3fdeg", 
+						P.x, P.y, (int)e.header.floorInd, ang * 180.0 / PI);
+					Log(colDbg);
+				}
+			}
 			else {
-				GS::UniString msg; msg.Printf("[Distrib] Create err=%d", (int)ce); Log(msg);
+				GS::UniString msg; 
+				msg.Printf("[Distrib] Create err=%d (type=%d, floor=%d)", 
+					(int)ce, (int)tid, (int)e.header.floorInd); 
+				Log(msg);
 			}
 		}
 
@@ -490,16 +511,39 @@ namespace LandscapeHelper {
 
 		// прототип
 		API_Element proto = {}; proto.header.guid = g_protoGuid;
-		if (ACAPI_Element_Get(&proto) != NoError) { LogA("[Distrib] ERR proto-get"); return false; }
+		if (ACAPI_Element_Get(&proto) != NoError) { 
+			GS::UniString errMsg; errMsg.Printf("[Distrib] ERR proto-get, guid=%s", APIGuidToString(g_protoGuid).ToCStr().Get());
+			Log(errMsg);
+			return false; 
+		}
 		const API_ElemTypeID tid = proto.header.type.typeID;
-		if (tid != API_ObjectID && tid != API_LampID && tid != API_ColumnID && tid != API_BeamID) { LogA("[Distrib] ERR proto-type"); return false; }
+		GS::UniString protoDbg; protoDbg.Printf("[Distrib] Proto: type=%d, floor=%d, guid=%s", 
+			(int)tid, (int)proto.header.floorInd, APIGuidToString(g_protoGuid).ToCStr().Get());
+		Log(protoDbg);
+		if (tid == API_ColumnID) {
+			GS::UniString colDbg; colDbg.Printf("[Distrib] Proto column: origoPos=(%.3f, %.3f), bottomOffset=%.6f, topOffset=%.6f",
+				proto.column.origoPos.x, proto.column.origoPos.y, proto.column.bottomOffset, proto.column.topOffset);
+			Log(colDbg);
+		}
+		if (tid != API_ObjectID && tid != API_LampID && tid != API_ColumnID && tid != API_BeamID) { 
+			LogA("[Distrib] ERR proto-type"); 
+			return false; 
+		}
 
 		// Undo + общий мемо
 		GSErrCode err = ACAPI_CallUndoableCommand("Distribute Along Multiple Paths", [&]() -> GSErrCode {
 			API_ElementMemo memo = {}; bool hasMemo = false;
 			// Загружаем memo для всех типов, которые могут его требовать
 			if (tid == API_ObjectID || tid == API_LampID || tid == API_BeamID || tid == API_ColumnID) {
-				if (ACAPI_Element_GetMemo(proto.header.guid, &memo) == NoError) hasMemo = true;
+				GSErrCode memoErr = ACAPI_Element_GetMemo(proto.header.guid, &memo);
+				if (memoErr == NoError) {
+					hasMemo = true;
+					GS::UniString memoDbg; memoDbg.Printf("[Distrib] Memo loaded OK for type=%d", (int)tid);
+					Log(memoDbg);
+				} else {
+					GS::UniString memoDbg; memoDbg.Printf("[Distrib] Memo load failed err=%d for type=%d (continuing without memo)", (int)memoErr, (int)tid);
+					Log(memoDbg);
+				}
 			}
 
 			UInt32 totalCreated = 0;

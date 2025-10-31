@@ -7,6 +7,7 @@
 class GroundHelper {
 public:
     static bool SetGroundSurface();
+    static bool SetGroundSurfaceByGuid(const API_Guid& meshGuid);  // Установить mesh напрямую по GUID
     static bool SetGroundObjects();
     static bool GetGroundZAndNormal(const API_Coord3D& pos3D, double& z, API_Vector3D& normal);
 

@@ -787,10 +787,16 @@ namespace MarkupHelper {
 				objects.push_back(obj);
 				// Log(GS::UniString::Printf("Lamp anchor: (%.3f, %.3f)", obj.anchor.x, obj.anchor.y));
 			}
+			else if (tid == API_BeamID) {
+				obj.anchor = Vec2(elem.beam.begC.x, elem.beam.begC.y);
+				obj.typeName = "Beam";
+				objects.push_back(obj);
+				// Log(GS::UniString::Printf("Beam anchor: (%.3f, %.3f)", obj.anchor.x, obj.anchor.y));
+			}
 		}
 
 		if (objects.empty()) {
-			// Log("No supported elements (Object/Column/Lamp) in selection");
+			// Log("No supported elements (Object/Column/Lamp/Beam) in selection");
 			return false;
 		}
 		// Log(GS::UniString::Printf("Valid objects for dimensioning: %d", (int)objects.size()));
@@ -948,6 +954,11 @@ namespace MarkupHelper {
 				obj.typeName = "Lamp";
 				hasAnchor = true;
 				break;
+			case API_BeamID:
+				obj.coord = element.beam.begC;
+				obj.typeName = "Beam";
+				hasAnchor = true;
+				break;
 			case API_WindowID:
 			case API_DoorID:
 				// Окна и двери не нужны
@@ -1074,6 +1085,11 @@ namespace MarkupHelper {
 			case API_LampID:
 				obj.coord = element.lamp.pos;
 				obj.typeName = "Lamp";
+				hasAnchor = true;
+				break;
+			case API_BeamID:
+				obj.coord = element.beam.begC;
+				obj.typeName = "Beam";
 				hasAnchor = true;
 				break;
 			case API_WindowID:

@@ -569,7 +569,7 @@ static bool ComputeGroundZ_MemoOnly(const API_Guid& meshGuid, const API_Coord3D&
 // ================================================================
 // Landable elements
 // ================================================================
-enum class LandableKind { Unsupported, Object, Lamp, Column };
+enum class LandableKind { Unsupported, Object, Lamp, Column, Beam };
 
 static LandableKind IdentifyLandable(const API_Element& e)
 {
@@ -577,6 +577,7 @@ static LandableKind IdentifyLandable(const API_Element& e)
     case API_ObjectID: return LandableKind::Object;
     case API_LampID:   return LandableKind::Lamp;
     case API_ColumnID: return LandableKind::Column;
+    case API_BeamID:   return LandableKind::Beam;
     default:           return LandableKind::Unsupported;
     }
 }
@@ -588,6 +589,7 @@ static API_Coord3D GetWorldAnchor(const API_Element& e)
     case LandableKind::Object: return { e.object.pos.x,      e.object.pos.y,      floorZ + e.object.level };
     case LandableKind::Lamp:   return { e.lamp.pos.x,        e.lamp.pos.y,        floorZ + e.lamp.level };
     case LandableKind::Column: return { e.column.origoPos.x, e.column.origoPos.y, floorZ + e.column.bottomOffset };
+    case LandableKind::Beam:   return { e.beam.begC.x,       e.beam.begC.y,        floorZ + e.beam.level };
     default: return { 0,0,0 };
     }
 }
@@ -622,6 +624,13 @@ static void SetWorldZ_WithDelta(API_Element& e, double finalWorldZ, double delta
         ACAPI_ELEMENT_MASK_SET(maskOut, API_ColumnType, topOffset);
         Log("[SetZ:Column] bottom %.6f->%.6f, topOffset %.6f->%.6f (delta=%.6f)",
             oldBot, e.column.bottomOffset, oldTop, e.column.topOffset, deltaWorldZ);
+        break;
+    }
+    case LandableKind::Beam: {
+        const double old = e.beam.level;
+        e.beam.level = finalWorldZ - floorZ;
+        ACAPI_ELEMENT_MASK_SET(maskOut, API_BeamType, level);
+        Log("[SetZ:Beam] old=%.6f new=%.6f (delta=%.6f)", old, e.beam.level, deltaWorldZ);
         break;
     }
     default: break;
@@ -660,6 +669,28 @@ bool GroundHelper::SetGroundSurface()
     return ok;
 }
 
+bool GroundHelper::SetGroundSurfaceByGuid(const API_Guid& meshGuid)
+{
+    Log("[SetGroundSurfaceByGuid] ENTER guid=%s", APIGuidToString(meshGuid).ToCStr().Get());
+    
+    // Проверяем, что это действительно mesh
+    API_Element el{}; el.header.guid = meshGuid;
+    const GSErr err = ACAPI_Element_Get(&el);
+    if (err != NoError) {
+        Log("[SetGroundSurfaceByGuid] Element_Get failed err=%d", (int)err);
+        return false;
+    }
+    if (el.header.type.typeID != API_MeshID) {
+        Log("[SetGroundSurfaceByGuid] Not a mesh, typeID=%d", (int)el.header.type.typeID);
+        return false;
+    }
+    
+    g_surfaceGuid = meshGuid;
+    g_hasCachedTIN = false; // Сбрасываем кеш при смене поверхности
+    Log("[SetGroundSurfaceByGuid] Mesh set: %s", APIGuidToString(meshGuid).ToCStr().Get());
+    return true;
+}
+
 bool GroundHelper::SetGroundObjects()
 {
     Log("[SetGroundObjects] ENTER");
@@ -675,7 +706,7 @@ bool GroundHelper::SetGroundObjects()
         if (ACAPI_Element_Get(&el) != NoError) continue;
         const short tid = el.header.type.typeID;
 
-        if ((tid == API_ObjectID || tid == API_LampID || tid == API_ColumnID) && n.guid != g_surfaceGuid) {
+        if ((tid == API_ObjectID || tid == API_LampID || tid == API_ColumnID || tid == API_BeamID) && n.guid != g_surfaceGuid) {
             g_objectGuids.Push(n.guid);
             Log("[SetGroundObjects] accept %s (type=%d)", APIGuidToString(n.guid).ToCStr().Get(), (int)tid);
         }

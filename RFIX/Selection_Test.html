@@ -120,9 +120,8 @@
     .tab-help:hover { filter:brightness(1.05); }
     .tab-help:active { transform:translateY(1px); }
 
-    /* COMMENTED OUT: Black log strip
+    /* Black log strip */
     #log-box { margin-top:10px; padding:8px; background:#111; color:#0f0; font-family:monospace; font-size:12px; height:140px; overflow:auto; }
-    */
     .muted { opacity:.6; }
   </style>
 
@@ -131,13 +130,14 @@
 
     // ================= helpers =================
     function AddLog(msg) {
-      // No UI log box for now; keep logs in console
+      // Log to console
       try { console.log(String(msg)); } catch(_) {}
-      // const box = document.getElementById('log-box');
-      // if (!box) return;
-      // const now = new Date().toLocaleTimeString();
-      // box.textContent += "\n[" + now + "] " + msg;
-      // box.scrollTop = box.scrollHeight;
+      // Also log to UI
+      const box = document.getElementById('log-box');
+      if (!box) return;
+      const now = new Date().toLocaleTimeString();
+      box.textContent += "\n[" + now + "] " + msg;
+      box.scrollTop = box.scrollHeight;
     }
     
     function setInfo(id, msg) {
@@ -347,31 +347,155 @@
     
     // Column orientation functions
     function SetColumnsForOrient() {
+      AddLog('[Columns] SetColumnsForOrient called');
       if (ACAPI?.SetColumns) {
+        AddLog('[Columns] Calling ACAPI.SetColumns...');
         ACAPI.SetColumns().then(function(success) {
-          setInfo("info-columns", success ? "✅ Columns set" : "❌ Failed to set columns");
+          AddLog('[Columns] SetColumns returned: ' + success);
+          if (success) {
+            setInfo("info-columns", "✅ Columns set");
+          } else {
+            // Попробуем установить балки, если колонны не найдены
+            AddLog('[Columns] No columns found, trying beams...');
+            if (ACAPI?.SetBeams) {
+              ACAPI.SetBeams().then(function(beamSuccess) {
+                AddLog('[Columns] SetBeams returned: ' + beamSuccess);
+                setInfo("info-columns", beamSuccess ? "✅ Beams set (auto-detected)" : "❌ No columns or beams found. Please select columns or beams first.");
+              });
+            } else {
+              setInfo("info-columns", "❌ No columns found. Please select columns first.");
+            }
+          }
+        }).catch(function(err) {
+          AddLog('[Columns] SetColumns error: ' + err);
+          setInfo("info-columns", "❌ Error: " + err);
         });
       } else {
+        AddLog('[Columns] ACAPI.SetColumns unavailable');
         setInfo("info-columns", "❌ Function unavailable");
       }
     }
     function SetMeshForColumns() {
+      AddLog('[Columns] SetMeshForColumns called');
       if (ACAPI?.SetMeshForColumns) {
+        AddLog('[Columns] Calling ACAPI.SetMeshForColumns...');
         ACAPI.SetMeshForColumns().then(function(success) {
+          AddLog('[Columns] SetMeshForColumns returned: ' + success);
           setInfo("info-columns", success ? "✅ Mesh set" : "❌ Failed to set mesh");
+        }).catch(function(err) {
+          AddLog('[Columns] SetMeshForColumns error: ' + err);
+          setInfo("info-columns", "❌ Error: " + err);
         });
       } else {
+        AddLog('[Columns] ACAPI.SetMeshForColumns unavailable');
         setInfo("info-columns", "❌ Function unavailable");
       }
     }
     function OrientColumnsToSurface() {
+      AddLog('[Columns] OrientColumnsToSurface called');
       if (ACAPI?.OrientColumnsToSurface) {
-        setInfo("info-columns", "Orienting columns to surface...");
+        setInfo("info-columns", "Orienting to surface...");
+        AddLog('[Columns] Calling ACAPI.OrientColumnsToSurface...');
         ACAPI.OrientColumnsToSurface().then(function(success) {
-          setInfo("info-columns", success ? "✅ Columns oriented to surface" : "❌ Failed to orient columns");
+          AddLog('[Columns] OrientColumnsToSurface returned: ' + success);
+          if (success) {
+            setInfo("info-columns", "✅ Oriented to surface");
+          } else {
+            // Попробуем ориентировать балки
+            AddLog('[Columns] Columns orientation failed, trying beams...');
+            if (ACAPI?.OrientBeamsToSurface) {
+              ACAPI.OrientBeamsToSurface().then(function(beamSuccess) {
+                AddLog('[Columns] OrientBeamsToSurface returned: ' + beamSuccess);
+                setInfo("info-columns", beamSuccess ? "✅ Beams oriented to surface" : "❌ Failed to orient. Make sure to set elements first.");
+              });
+            } else {
+              setInfo("info-columns", "❌ Failed to orient. Make sure to set columns/beams first.");
+            }
+          }
+        }).catch(function(err) {
+          AddLog('[Columns] OrientColumnsToSurface error: ' + err);
+          setInfo("info-columns", "❌ Error: " + err);
         });
       } else {
+        AddLog('[Columns] ACAPI.OrientColumnsToSurface unavailable');
         setInfo("info-columns", "❌ Function unavailable");
+      }
+    }
+    function SetBeamsForOrient() {
+      AddLog('[Beams] SetBeamsForOrient called');
+      if (ACAPI?.SetBeams) {
+        AddLog('[Beams] Calling ACAPI.SetBeams...');
+        ACAPI.SetBeams().then(function(success) {
+          AddLog('[Beams] SetBeams returned: ' + success);
+          if (success) {
+            setInfo("info-beams", "✅ Beams set");
+          } else {
+            // Попробуем установить колонны, если балки не найдены
+            AddLog('[Beams] No beams found, trying columns...');
+            if (ACAPI?.SetColumns) {
+              ACAPI.SetColumns().then(function(colSuccess) {
+                AddLog('[Beams] SetColumns returned: ' + colSuccess);
+                setInfo("info-beams", colSuccess ? "✅ Columns set (auto-detected)" : "❌ No beams or columns found. Please select beams or columns first.");
+              });
+            } else {
+              setInfo("info-beams", "❌ No beams found. Please select beams first.");
+            }
+          }
+        }).catch(function(err) {
+          AddLog('[Beams] SetBeams error: ' + err);
+          setInfo("info-beams", "❌ Error: " + err);
+        });
+      } else {
+        AddLog('[Beams] ACAPI.SetBeams unavailable');
+        setInfo("info-beams", "❌ Function unavailable");
+      }
+    }
+    function OrientBeamsToSurface() {
+      AddLog('[Beams] OrientBeamsToSurface called');
+      if (ACAPI?.OrientBeamsToSurface) {
+        setInfo("info-beams", "Orienting beams to surface...");
+        AddLog('[Beams] Calling ACAPI.OrientBeamsToSurface...');
+        ACAPI.OrientBeamsToSurface().then(function(success) {
+          AddLog('[Beams] OrientBeamsToSurface returned: ' + success);
+          setInfo("info-beams", success ? "✅ Beams oriented to surface" : "❌ Failed to orient beams");
+        }).catch(function(err) {
+          AddLog('[Beams] OrientBeamsToSurface error: ' + err);
+          setInfo("info-beams", "❌ Error: " + err);
+        });
+      } else {
+        AddLog('[Beams] ACAPI.OrientBeamsToSurface unavailable');
+        setInfo("info-beams", "❌ Function unavailable");
+      }
+    }
+    function RotateSelectedOrientation() {
+      AddLog('[Rotate] RotateSelectedOrientation called');
+      const angleInput = document.getElementById('rotateAngleInput');
+      if (!angleInput) {
+        AddLog('[Rotate] rotateAngleInput not found');
+        return;
+      }
+      const angleDeg = Number(angleInput.value) || 0;
+      AddLog('[Rotate] Angle from input: ' + angleDeg + ' degrees');
+      
+      if (ACAPI?.RotateSelectedOrientation) {
+        setInfo("info-rotate", "Rotating selected elements...");
+        AddLog('[Rotate] Calling ACAPI.RotateSelectedOrientation(' + angleDeg + ')...');
+        const result = ACAPI.RotateSelectedOrientation(angleDeg);
+        if (result && typeof result.then === 'function') {
+          result.then(function(success) {
+            AddLog('[Rotate] RotateSelectedOrientation returned: ' + success);
+            setInfo("info-rotate", success ? "✅ Rotated " + angleDeg + "°" : "❌ Failed to rotate. Select beams first.");
+          }).catch(function(err) {
+            AddLog('[Rotate] RotateSelectedOrientation error: ' + err);
+            setInfo("info-rotate", "❌ Error: " + err);
+          });
+        } else {
+          AddLog('[Rotate] RotateSelectedOrientation returned: ' + result);
+          setInfo("info-rotate", result ? "✅ Rotated " + angleDeg + "°" : "❌ Failed to rotate. Select beams first.");
+        }
+      } else {
+        AddLog('[Rotate] ACAPI.RotateSelectedOrientation unavailable');
+        setInfo("info-rotate", "❌ Function unavailable");
       }
     }
     function SetDistributionStep () {
@@ -888,7 +1012,7 @@
     <button class="tablink" onclick="openTab(event,'tab-shell')">Contours</button>
     <button class="tablink" onclick="openTab(event,'tab-id')">ID</button>
     <button class="tablink" onclick="openTab(event,'tab-layers')">Layers</button>
-    <button class="tablink" onclick="openTab(event,'tab-columns')">Columns</button>
+    <button class="tablink" onclick="openTab(event,'tab-columns')">Angle</button>
   </div>
 
   <!-- Distribution -->
@@ -1150,14 +1274,14 @@
             data-help-title="Help: Layers and ID">Help</button>
   </div>
 
-  <!-- Columns -->
+  <!-- Angle -->
   <div id="tab-columns" class="tabcontent">
     <fieldset class="control-block">
-      <legend>Column Orientation</legend>
+      <legend>Beam Orientation</legend>
       <div style="text-align:center; margin-bottom:15px;">
         <input type="button" 
-               onclick="SetColumnsForOrient()" 
-               value="Set Columns"
+               onclick="SetBeamsForOrient()" 
+               value="Set Beams"
                style="font-size:14px; padding:8px 20px; font-weight:bold; margin-bottom:10px;">
         <br>
         <input type="button" 
@@ -1166,27 +1290,53 @@
                style="font-size:14px; padding:8px 20px; font-weight:bold; margin-bottom:10px;">
         <br>
         <input type="button" 
-               onclick="OrientColumnsToSurface()" 
+               onclick="OrientBeamsToSurface()" 
                value="Orient to Surface"
                style="font-size:16px; padding:10px 25px; font-weight:bold; background:#4F604F; color:white; border:none; border-radius:4px; cursor:pointer; margin-top:10px;">
       </div>
-      <div id="info-columns" class="info-box">
+      <div id="info-beams" class="info-box">
         <strong>Instructions:</strong><br>
-        1. Select columns and click "Set Columns"<br>
+        1. Select beams and click "Set Beams"<br>
         2. Select mesh surface and click "Set Mesh"<br>
-        3. Click "Orient to Surface" to align columns with mesh<br>
-        <strong>Note:</strong> Column height is preserved, only orientation changes
+        3. Click "Orient to Surface" to align beams with mesh<br>
+        <strong>Note:</strong> Beam length is preserved, beam direction follows surface tangent plane
+      </div>
+    </fieldset>
+
+    <fieldset class="control-block" style="margin-top:20px;">
+      <legend>Rotate Selected</legend>
+      <div style="text-align:center; margin-bottom:15px;">
+        <input type="number" 
+               id="rotateAngleInput"
+               step="0.1"
+               value="0"
+               placeholder="Angle (degrees)"
+               style="font-size:14px; padding:8px 15px; width:150px; margin-bottom:10px; text-align:center;">
+        <br>
+        <input type="button" 
+               onclick="RotateSelectedOrientation()" 
+               value="Rotate"
+               style="font-size:16px; padding:10px 25px; font-weight:bold; background:#4F604F; color:white; border:none; border-radius:4px; cursor:pointer; margin-top:10px;">
+      </div>
+      <div id="info-rotate" class="info-box">
+        <strong>Instructions:</strong><br>
+        1. Select beams<br>
+        2. Enter rotation angle in degrees (positive or negative)<br>
+        3. Click "Rotate" to rotate selected beams<br>
+        <strong>Examples:</strong><br>
+        • +180° - rotate 180 degrees clockwise<br>
+        • -360° - rotate 360 degrees counter-clockwise<br>
+        • +90° - rotate 90 degrees clockwise
       </div>
     </fieldset>
 
     <button class="tab-help"
             data-help-url="https://landscape.227.info/help/columns"
-            data-help-title="Help: Column Orientation">Help</button>
+            data-help-title="Help: Column/Beam Orientation">Help</button>
   </div>
 
-  <!-- COMMENTED OUT: Black log strip
+  <!-- Black log strip -->
   <div id="log-box">[Plugin log will appear here]</div>
-  -->
 
   <a href="#"
      data-help-url="https://landscape.227.info/?embed=1"
