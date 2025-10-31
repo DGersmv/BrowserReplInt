@@ -740,9 +740,11 @@ bool GroundHelper::ApplyZDelta(double deltaMeters)
 {
     Log("[ApplyZDelta] ENTER delta=%.6f", deltaMeters);
 
-    if (g_objectGuids.IsEmpty()) {
-        Log("[ApplyZDelta] no objects in cache, try selection");
-        if (!SetGroundObjects()) { Log("[ApplyZDelta] no objects in selection"); return false; }
+    // ВСЕГДА обновляем кэш из текущего выделения, чтобы использовать актуальные объекты
+    Log("[ApplyZDelta] updating cache from current selection");
+    if (!SetGroundObjects()) { 
+        Log("[ApplyZDelta] no objects in selection"); 
+        return false; 
     }
 
     const GSErr cmdErr = ACAPI_CallUndoableCommand("Adjust Z by Delta", [=]() -> GSErr {

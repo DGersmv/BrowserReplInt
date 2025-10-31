@@ -582,27 +582,24 @@ namespace MarkupHelper {
 	// ============================================================================
 	bool SetMarkupStep(double stepMM)
 	{
-		ACAPI_WriteReport("[MarkupHelper] SetMarkupStep called with stepMM=%.6f", false, stepMM);
 		if (stepMM <= 0.0) { 
-			ACAPI_WriteReport("[MarkupHelper] Invalid step: must be > 0", false);
 			return false; 
 		}
 		g_stepMeters = stepMM / 1000.0;
-		ACAPI_WriteReport("[MarkupHelper] Step set: %.1f mm (%.6f m)", false, stepMM, g_stepMeters);
 		return true;
 	}
 
 	bool CreateMarkupDimensions()
 	{
-		// Log("=== CreateMarkupDimensions START ===");
-
 		// 1) выделение
 		API_SelectionInfo selInfo = {};
 		GS::Array<API_Neig> selNeigs;
 		ACAPI_Selection_Get(&selInfo, &selNeigs, false, false);
 		BMKillHandle((GSHandle*)&selInfo.marquee.coords);
 
-		if (selNeigs.IsEmpty()) { /* Log("No elements selected"); */ return false; }
+		if (selNeigs.IsEmpty()) {
+			return false;
+		}
 		// Log(GS::UniString::Printf("Selected elements: %d", (int)selNeigs.GetSize()));
 
 		struct ElementContourData { API_Guid guid; std::vector<ContourSeg> segments; double totalLength; };
@@ -627,17 +624,22 @@ namespace MarkupHelper {
 			}
 		}
 
-		if (elements.empty()) { /* Log("No supported elements (Mesh/Slab/Wall/Shell) in selection"); */ return false; }
-		// Log(GS::UniString::Printf("Valid elements for markup: %d", (int)elements.size()));
+		if (elements.empty()) {
+			return false;
+		}
 
 		// 2) направление
 		API_GetPointType gp1 = {}; CHCopyC("Разметка: укажите НАЧАЛО направления (точка 1)", gp1.prompt);
 		GSErrCode err = ACAPI_UserInput_GetPoint(&gp1);
-		if (err != NoError) { /* Log(GS::UniString::Printf("GetPoint #1 cancelled/failed: %d", (int)err)); */ return false; }
+		if (err != NoError) {
+			return false;
+		}
 
 		API_GetPointType gp2 = {}; CHCopyC("Разметка: укажите КОНЕЦ направления (точка 2)", gp2.prompt);
 		err = ACAPI_UserInput_GetPoint(&gp2);
-		if (err != NoError) { /* Log(GS::UniString::Printf("GetPoint #2 cancelled/failed: %d", (int)err)); */ return false; }
+		if (err != NoError) {
+			return false;
+		}
 
 		const Vec2 P1(gp1.pos.x, gp1.pos.y);
 		const Vec2 P2(gp2.pos.x, gp2.pos.y);
@@ -671,7 +673,9 @@ namespace MarkupHelper {
 			}
 			if (sideSign != 0) break;
 		}
-		if (sideSign == 0) { /* Log("No intersection found with any element contour"); */ return false; }
+		if (sideSign == 0) {
+			return false;
+		}
 
 		// Log(GS::UniString::Printf("First hit at t=%.3f, side=%s", firstTOnLine, sideSign > 0 ? "+⊥" : "-⊥"));
 
@@ -700,8 +704,6 @@ namespace MarkupHelper {
 			}
 		}
 
-		// Log(GS::UniString::Printf("Total dimension pairs: %d", (int)dimensionPairs.size()));
-
 		// 5) Undo-группа
 		int createdCount = 0;
 		err = ACAPI_CallUndoableCommand("Разметка", [&]() -> GSErrCode {
@@ -712,7 +714,6 @@ namespace MarkupHelper {
 				if (d > 0.01) {
 					if (CreateDimensionBetweenPoints(A.toCoord(), B.toCoord())) {
 						++createdCount;
-						// Log(GS::UniString::Printf("Dimension created: distance=%.3fm", d));
 					}
 				}
 			}
@@ -720,11 +721,9 @@ namespace MarkupHelper {
 			});
 
 		if (err == NoError && createdCount > 0) {
-			// Log(GS::UniString::Printf("=== SUCCESS: Created %d dimensions ===", createdCount));
 			return true;
 		}
 		else if (createdCount == 0) {
-			// Log("No dimensions created (no intersections found)");
 			return false;
 		}
 		else {

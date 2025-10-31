@@ -50,41 +50,30 @@ static GS::UniString LoadHtmlFromResource()
 // Общий хелпер: вытащить double из JS::Base (поддерживает number, string "3,5"/"3.5", bool, а также массив аргументов)
 static double GetDoubleFromJs(GS::Ref<JS::Base> p, double def = 0.0)
 {
-	ACAPI_WriteReport("[JS->C++] GetDoubleFromJs: def=%.6f", false, def);
-	
 	if (p == nullptr) {
-		ACAPI_WriteReport("[JS->C++] GetDoubleFromJs: param is nullptr, returning def", false);
 		return def;
 	}
 
 	if (GS::Ref<JS::Value> v = GS::DynamicCast<JS::Value>(p)) {
 		const auto t = v->GetType();
-		ACAPI_WriteReport("[JS->C++] GetDoubleFromJs: type=%d", false, (int)t);
 
 		if (t == JS::Value::DOUBLE) {
-			const double result = v->GetDouble();
-			ACAPI_WriteReport("[JS->C++] GetDoubleFromJs: DOUBLE value=%.6f", false, result);
-			return result;
+			return v->GetDouble();
 		}
 		
 		if (t == JS::Value::INTEGER) {
-			const double result = v->GetDouble();
-			ACAPI_WriteReport("[JS->C++] GetDoubleFromJs: INTEGER value=%.6f", false, result);
-			return result;
+			return v->GetDouble();
 		}
 
 		if (t == JS::Value::STRING) {
 			GS::UniString s = v->GetString();
-			ACAPI_WriteReport("[JS->C++] GetDoubleFromJs: string value='%s'", false, s.ToCStr().Get());
 			for (UIndex i = 0; i < s.GetLength(); ++i) if (s[i] == ',') s[i] = '.';
 			double out = def;
 			std::sscanf(s.ToCStr().Get(), "%lf", &out);
-			ACAPI_WriteReport("[JS->C++] GetDoubleFromJs: parsed=%.6f", false, out);
 			return out;
 		}
 	}
 
-	ACAPI_WriteReport("[JS->C++] GetDoubleFromJs: unsupported param type", false);
 	return def;
 }
 
@@ -296,7 +285,6 @@ void BrowserRepl::RegisterACAPIJavaScriptObject()
 	// --- ΔZ API (двухшаговый буфер + совместимость со старым мостом) ---
 	jsACAPI->AddItem(new JS::Function("SetZDelta", [](GS::Ref<JS::Base> param) {
 		g_lastZDeltaMeters = GetDoubleFromJs(param, 0.0);
-		ACAPI_WriteReport("[JS->C++] SetZDelta parsed=%.6f m", false, g_lastZDeltaMeters);
 		if (BrowserRepl::HasInstance())
 			BrowserRepl::GetInstance().LogToBrowser(GS::UniString::Printf("[JS] SetZDelta=%.3f m", g_lastZDeltaMeters));
 		return new JS::Value(true);
@@ -343,7 +331,6 @@ void BrowserRepl::RegisterACAPIJavaScriptObject()
 
 	jsACAPI->AddItem(new JS::Function("ApplyGroundOffset", [](GS::Ref<JS::Base> param) {
 		const double offset = GetDoubleFromJs(param, 0.0); // offset на C++ стороне сейчас игнорируется, но логируем
-		ACAPI_WriteReport("[JS->C++] ApplyGroundOffset parsed=%.6f m", false, offset);
 		if (BrowserRepl::HasInstance())
 			BrowserRepl::GetInstance().LogToBrowser(GS::UniString::Printf("[JS] ApplyGroundOffset(%.3f m)", offset));
 		const bool ok = GroundHelper::ApplyGroundOffset(offset);
@@ -476,7 +463,6 @@ void BrowserRepl::RegisterACAPIJavaScriptObject()
 		}));
 
 	jsACAPI->AddItem(new JS::Function("CreateMarkupDimensions", [](GS::Ref<JS::Base>) {
-		if (BrowserRepl::HasInstance()) BrowserRepl::GetInstance().LogToBrowser("[JS] CreateMarkupDimensions()");
 		return new JS::Value(MarkupHelper::CreateMarkupDimensions());
 		}));
 

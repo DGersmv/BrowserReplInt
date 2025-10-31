@@ -20,12 +20,12 @@ namespace LandscapeHelper {
 	static int       g_count = 1;
 
 	static inline void LogA(const char* s) {
-		// if (BrowserRepl::HasInstance())
-		//	BrowserRepl::GetInstance().LogToBrowser(GS::UniString(s));
+		if (BrowserRepl::HasInstance())
+			BrowserRepl::GetInstance().LogToBrowser(GS::UniString(s));
 	}
 	static inline void Log(const GS::UniString& s) {
-		// if (BrowserRepl::HasInstance())
-		//	BrowserRepl::GetInstance().LogToBrowser(s);
+		if (BrowserRepl::HasInstance())
+			BrowserRepl::GetInstance().LogToBrowser(s);
 	}
 	static inline double UiStepToMeters(double stepMm) { return stepMm / 1000.0; }
 
@@ -305,20 +305,37 @@ namespace LandscapeHelper {
 	}
 
 	static bool AutoGrabProtoIfNeeded() {
-		if (g_protoGuid != APINULLGuid) return true;
+		if (g_protoGuid != APINULLGuid) {
+			LogA("[Distrib] PROTO already set, skip autograb");
+			return true;
+		}
 
+		LogA("[Distrib] AutoGrabProtoIfNeeded ENTER");
 		API_SelectionInfo si = {}; GS::Array<API_Neig> neigs;
 		ACAPI_Selection_Get(&si, &neigs, false, false);
 		BMKillHandle((GSHandle*)&si.marquee.coords);
 
+		GS::UniString selDbg; selDbg.Printf("[Distrib] autograb selection count=%u", (unsigned)neigs.GetSize());
+		Log(selDbg);
+
 		for (const API_Neig& n : neigs) {
 			API_Element el = {}; el.header.guid = n.guid;
-			if (ACAPI_Element_GetHeader(&el.header) != NoError) continue;
+			if (ACAPI_Element_GetHeader(&el.header) != NoError) {
+				LogA("[Distrib] autograb GetHeader failed");
+				continue;
+			}
 			const API_ElemTypeID tid = el.header.type.typeID;
-			if (tid == API_ObjectID || tid == API_LampID || tid == API_ColumnID) {
-				g_protoGuid = n.guid; LogA("[Distrib] PROTO AUTOGRAB"); return true;
+			GS::UniString typeDbg; typeDbg.Printf("[Distrib] autograb checking type=%d", (int)tid);
+			Log(typeDbg);
+			if (tid == API_ObjectID || tid == API_LampID || tid == API_ColumnID || tid == API_BeamID) {
+				g_protoGuid = n.guid; 
+				GS::UniString protoDbg; protoDbg.Printf("[Distrib] PROTO AUTOGRAB: %s (type=%d)", 
+					APIGuidToString(n.guid).ToCStr().Get(), (int)tid);
+				Log(protoDbg);
+				return true;
 			}
 		}
+		LogA("[Distrib] autograb no suitable proto found");
 		return false;
 	}
 
@@ -348,16 +365,30 @@ namespace LandscapeHelper {
 
 	bool SetDistributionObject()
 	{
+		LogA("[Distrib] SetDistributionObject ENTER");
 		API_SelectionInfo si = {}; GS::Array<API_Neig> neigs;
 		ACAPI_Selection_Get(&si, &neigs, false, false);
 		BMKillHandle((GSHandle*)&si.marquee.coords);
 
+		GS::UniString selDbg; selDbg.Printf("[Distrib] selection count=%u", (unsigned)neigs.GetSize());
+		Log(selDbg);
+
 		for (const API_Neig& n : neigs) {
 			API_Element el = {}; el.header.guid = n.guid;
-			if (ACAPI_Element_GetHeader(&el.header) != NoError) continue;
+			if (ACAPI_Element_GetHeader(&el.header) != NoError) {
+				LogA("[Distrib] ERR GetHeader failed");
+				continue;
+			}
 			const API_ElemTypeID tid = el.header.type.typeID;
-			if (tid == API_ObjectID || tid == API_LampID || tid == API_ColumnID) {
-				g_protoGuid = n.guid; LogA("[Distrib] PROTO SET"); return true;
+			GS::UniString typeDbg; typeDbg.Printf("[Distrib] checking type=%d (Object=%d, Lamp=%d, Column=%d, Beam=%d)",
+				(int)tid, (int)API_ObjectID, (int)API_LampID, (int)API_ColumnID, (int)API_BeamID);
+			Log(typeDbg);
+			if (tid == API_ObjectID || tid == API_LampID || tid == API_ColumnID || tid == API_BeamID) {
+				g_protoGuid = n.guid; 
+				GS::UniString protoDbg; protoDbg.Printf("[Distrib] PROTO SET: %s (type=%d)", 
+					APIGuidToString(n.guid).ToCStr().Get(), (int)tid);
+				Log(protoDbg);
+				return true;
 			}
 		}
 		LogA("[Distrib] ERR no-proto");
@@ -412,7 +443,19 @@ namespace LandscapeHelper {
 
 			if (tid == API_ObjectID) { e.object.pos = P;  e.object.angle = ang; }
 			else if (tid == API_LampID) { e.lamp.pos = P;  e.lamp.angle = ang; }
-			else /* Column */ { e.column.origoPos = P; e.column.axisRotationAngle = ang; }
+			else if (tid == API_BeamID) {
+				// Балка: вычисляем конечную точку на основе длины из прототипа и угла
+				const double beamLen = std::hypot(
+					proto.beam.endC.x - proto.beam.begC.x,
+					proto.beam.endC.y - proto.beam.begC.y);
+				e.beam.begC = P;
+				e.beam.endC.x = P.x + beamLen * std::cos(ang);
+				e.beam.endC.y = P.y + beamLen * std::sin(ang);
+			}
+			else if (tid == API_ColumnID) { 
+				e.column.origoPos = P; 
+				e.column.axisRotationAngle = ang;
+			}
 
 			const GSErrCode ce = ACAPI_Element_Create(&e, protoMemo);
 			if (ce == NoError) ++created;
@@ -449,12 +492,13 @@ namespace LandscapeHelper {
 		API_Element proto = {}; proto.header.guid = g_protoGuid;
 		if (ACAPI_Element_Get(&proto) != NoError) { LogA("[Distrib] ERR proto-get"); return false; }
 		const API_ElemTypeID tid = proto.header.type.typeID;
-		if (tid != API_ObjectID && tid != API_LampID && tid != API_ColumnID) { LogA("[Distrib] ERR proto-type"); return false; }
+		if (tid != API_ObjectID && tid != API_LampID && tid != API_ColumnID && tid != API_BeamID) { LogA("[Distrib] ERR proto-type"); return false; }
 
 		// Undo + общий мемо
 		GSErrCode err = ACAPI_CallUndoableCommand("Distribute Along Multiple Paths", [&]() -> GSErrCode {
 			API_ElementMemo memo = {}; bool hasMemo = false;
-			if (tid == API_ObjectID || tid == API_LampID) {
+			// Загружаем memo для всех типов, которые могут его требовать
+			if (tid == API_ObjectID || tid == API_LampID || tid == API_BeamID || tid == API_ColumnID) {
 				if (ACAPI_Element_GetMemo(proto.header.guid, &memo) == NoError) hasMemo = true;
 			}
 
